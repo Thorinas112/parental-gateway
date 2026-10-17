@@ -423,9 +423,13 @@ the system's known limitations.
 | Symptom | Fix |
 |---|---|
 | Firewall pill shows **dry-run** | `iptables` is missing or the container lacks `NET_ADMIN`. Add `cap_add: [NET_ADMIN, NET_RAW]`. |
+| `could not enable net.ipv4.ip_forward` / `forwarding: False` | The container cannot write the sysctl. With `network_mode: host` it shares the host's network namespace, so set it **on the host** instead: `sysctl -w net.ipv4.ip_forward=1`. If the host is itself an **LXC**, the container may refuse the write — add `lxc.sysctl.net.ipv4.ip_forward: 1` to `/etc/pve/lxc/<CTID>.conf` and restart. Without forwarding the `FORWARD` chain never sees a packet, so no blocking happens. |
 | No devices found on Scan | Host networking is required. Bridge networking cannot see your LAN. |
 | Rules computed but clients still online | Clients must route **through** this container — set their DHCP gateway to the container IP (see deployment guide). |
 | "could not auto-detect LAN_SUBNET" | Set `LAN_SUBNET=192.168.1.0/24` explicitly in `.env`. |
+| `docker: unknown command: docker compose` | The Compose V2 plugin is missing — Ubuntu's `docker.io` package does not ship it. `sudo apt-get install -y docker-compose-v2`, or run `scripts/setup-host.sh`. |
+| `permission denied` on `/var/run/docker.sock` | Your user is not in the `docker` group: `sudo usermod -aG docker $USER && newgrp docker`. |
+| `error from registry: unauthorized` when pulling | The GHCR package is private. Either make it public, `docker login ghcr.io` with a `read:packages` token, or build with the `docker-compose.build.yml` override. |
 | Sessions lost on restart | Set `SECRET_KEY` in `.env`, or keep the `./data` volume. |
 | Schedules not firing | Schedules use the container clock — set `TZ` correctly. |
 

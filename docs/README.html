@@ -512,6 +512,11 @@ or make the repository and package public.</p>
 <p>Multi-arch (<code>linux/amd64</code>, <code>linux/arm64</code>) images are published to GHCR on every<br />
 release, so a Raspberry Pi deploys exactly the same way as a server. There is<br />
 no build step.</p>
+<p><strong>One-liner</strong> — installs the Docker Compose/buildx plugins if they are missing,<br />
+adds you to the <code>docker</code> group, clones, configures and starts:</p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/scripts/setup-host.sh | bash -s -- --deploy
+</code></pre>
+<p><strong>Or by hand:</strong></p>
 <pre><code class="language-bash">gh repo clone Thorinas112/parental-gateway        # or: git clone &lt;repo-url&gt;
 cd parental-gateway
 
@@ -1089,6 +1094,10 @@ the system's known limitations.</p>
 <td><code>iptables</code> is missing or the container lacks <code>NET_ADMIN</code>. Add <code>cap_add: [NET_ADMIN, NET_RAW]</code>.</td>
 </tr>
 <tr>
+<td><code>could not enable net.ipv4.ip_forward</code> / <code>forwarding: False</code></td>
+<td>The container cannot write the sysctl. With <code>network_mode: host</code> it shares the host's network namespace, so set it <strong>on the host</strong> instead: <code>sysctl -w net.ipv4.ip_forward=1</code>. If the host is itself an <strong>LXC</strong>, the container may refuse the write — add <code>lxc.sysctl.net.ipv4.ip_forward: 1</code> to <code>/etc/pve/lxc/&lt;CTID&gt;.conf</code> and restart. Without forwarding the <code>FORWARD</code> chain never sees a packet, so no blocking happens.</td>
+</tr>
+<tr>
 <td>No devices found on Scan</td>
 <td>Host networking is required. Bridge networking cannot see your LAN.</td>
 </tr>
@@ -1099,6 +1108,18 @@ the system's known limitations.</p>
 <tr>
 <td>"could not auto-detect LAN_SUBNET"</td>
 <td>Set <code>LAN_SUBNET=192.168.1.0/24</code> explicitly in <code>.env</code>.</td>
+</tr>
+<tr>
+<td><code>docker: unknown command: docker compose</code></td>
+<td>The Compose V2 plugin is missing — Ubuntu's <code>docker.io</code> package does not ship it. <code>sudo apt-get install -y docker-compose-v2</code>, or run <code>scripts/setup-host.sh</code>.</td>
+</tr>
+<tr>
+<td><code>permission denied</code> on <code>/var/run/docker.sock</code></td>
+<td>Your user is not in the <code>docker</code> group: <code>sudo usermod -aG docker $USER &amp;&amp; newgrp docker</code>.</td>
+</tr>
+<tr>
+<td><code>error from registry: unauthorized</code> when pulling</td>
+<td>The GHCR package is private. Either make it public, <code>docker login ghcr.io</code> with a <code>read:packages</code> token, or build with the <code>docker-compose.build.yml</code> override.</td>
 </tr>
 <tr>
 <td>Sessions lost on restart</td>
