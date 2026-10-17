@@ -373,8 +373,9 @@ body.docs-body {
 <li class="toc-l1"><a href="#parental-gateway">Parental Gateway</a><ul>
 <li class="toc-l2"><a href="#features">Features</a></li>
 <li class="toc-l2"><a href="#quick-start">Quick start</a><ul>
-<li class="toc-l3"><a href="#option-a-pull-the-published-image-recommended">Option A — pull the published image (recommended)</a></li>
+<li class="toc-l3"><a href="#option-a-run-the-published-image-recommended">Option A — run the published image (recommended)</a></li>
 <li class="toc-l3"><a href="#option-b-build-from-source">Option B — build from source</a></li>
+<li class="toc-l3"><a href="#access-and-authentication">Access and authentication</a></li>
 </ul>
 </li>
 <li class="toc-l2"><a href="#reading-the-documentation">Reading the documentation</a></li>
@@ -501,28 +502,45 @@ blocking, pause timers and weekly bedtime schedules.</p>
 </table>
 <hr />
 <h2 id="quick-start">Quick start</h2>
-<h3 id="option-a-pull-the-published-image-recommended">Option A — pull the published image (recommended)</h3>
+<blockquote>
+<p><strong>Note on cloning.</strong> This repository is currently <strong>private</strong>, so <code>curl</code> on<br />
+<code>raw.githubusercontent.com</code> returns 404 and <code>git clone</code>/<code>docker pull</code> need<br />
+credentials. Authenticate once first (see <a href="#access-and-authentication">Access and authentication</a>),<br />
+or make the repository and package public.</p>
+</blockquote>
+<h3 id="option-a-run-the-published-image-recommended">Option A — run the published image (recommended)</h3>
 <p>Multi-arch (<code>linux/amd64</code>, <code>linux/arm64</code>) images are published to GHCR on every<br />
-release, so a Raspberry Pi deploys exactly the same way as a server.</p>
-<pre><code class="language-bash">mkdir parental-gateway &amp;&amp; cd parental-gateway
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+release, so a Raspberry Pi deploys exactly the same way as a server. There is<br />
+no build step.</p>
+<pre><code class="language-bash">gh repo clone Thorinas112/parental-gateway        # or: git clone &lt;repo-url&gt;
+cd parental-gateway
 
-cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
-sed -i 's|build:|image: ghcr.io/thorinas112/parental-gateway:latest\n    # build:|' docker-compose.yml
+cp .env.example .env
+nano .env                                          # set LAN_IFACE / WAN_IFACE
 
 docker compose up -d
 xdg-open http://&lt;host-ip&gt;:8080
 </code></pre>
+<p><code>docker-compose.yml</code> points at <code>ghcr.io/thorinas112/parental-gateway:latest</code> —<br />
+it pulls, it does not build.</p>
 <h3 id="option-b-build-from-source">Option B — build from source</h3>
-<pre><code class="language-bash">git clone https://github.com/Thorinas112/parental-gateway.git
-cd parental-gateway
-
-cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
-docker compose up -d --build
-
-# open the UI
-xdg-open http://&lt;host-ip&gt;:8080
+<p>Same clone and <code>.env</code>, then use the build override:</p>
+<pre><code class="language-bash">docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+</code></pre>
+<h3 id="access-and-authentication">Access and authentication</h3>
+<p>Because the repository is private, you need credentials on the deploying host.</p>
+<p><strong>For the source</strong> — a GitHub token with the <code>repo</code> scope:</p>
+<pre><code class="language-bash">gh auth login                              # easiest
+# or
+git clone https://&lt;TOKEN&gt;@github.com/Thorinas112/parental-gateway.git
+</code></pre>
+<p><strong>For the container image</strong> — a Personal Access Token with <code>read:packages</code>:</p>
+<pre><code class="language-bash"># create one at https://github.com/settings/tokens/new  (scope: read:packages)
+docker login ghcr.io -u Thorinas112 --password-stdin
+</code></pre>
+<p><strong>Or skip authentication entirely</strong> — make the repo and package public:</p>
+<pre><code class="language-bash">gh repo edit Thorinas112/parental-gateway --visibility public
+gh api -X POST user/packages/container/parental-gateway/visibility -f visibility=public
 </code></pre>
 <p><strong>On first run there is no account at all.</strong> The gateway detects an empty<br />
 install and serves a <strong>setup wizard</strong> that creates your administrator login and<br />
@@ -978,7 +996,8 @@ allow timer. The UI always shows <em>why</em> a device is blocked.</p>
 <pre><code>parental-gateway/
 ├── .github/workflows/         # CI + release/publish pipelines
 ├── Dockerfile                 # slim Python image + iptables/iproute2/scapy tooling
-├── docker-compose.yml         # host networking + NET_ADMIN/NET_RAW
+├── docker-compose.yml         # runs the published image (host networking + caps)
+├── docker-compose.build.yml   # override: build the image from source
 ├── entrypoint.sh              # ip_forward, NAT bootstrap, interface config
 ├── requirements.txt
 ├── .env.example

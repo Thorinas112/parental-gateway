@@ -55,34 +55,63 @@ blocking, pause timers and weekly bedtime schedules.
 
 ## Quick start
 
-### Option A — pull the published image (recommended)
+> **Note on cloning.** This repository is currently **private**, so `curl` on
+> `raw.githubusercontent.com` returns 404 and `git clone`/`docker pull` need
+> credentials. Authenticate once first (see [Access and authentication](#access-and-authentication)),
+> or make the repository and package public.
+
+### Option A — run the published image (recommended)
 
 Multi-arch (`linux/amd64`, `linux/arm64`) images are published to GHCR on every
-release, so a Raspberry Pi deploys exactly the same way as a server.
+release, so a Raspberry Pi deploys exactly the same way as a server. There is
+no build step.
 
 ```bash
-mkdir parental-gateway && cd parental-gateway
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+gh repo clone Thorinas112/parental-gateway        # or: git clone <repo-url>
+cd parental-gateway
 
-cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
-sed -i 's|build:|image: ghcr.io/thorinas112/parental-gateway:latest\n    # build:|' docker-compose.yml
+cp .env.example .env
+nano .env                                          # set LAN_IFACE / WAN_IFACE
 
 docker compose up -d
 xdg-open http://<host-ip>:8080
 ```
 
+`docker-compose.yml` points at `ghcr.io/thorinas112/parental-gateway:latest` —
+it pulls, it does not build.
+
 ### Option B — build from source
 
+Same clone and `.env`, then use the build override:
+
 ```bash
-git clone https://github.com/Thorinas112/parental-gateway.git
-cd parental-gateway
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
-cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
-docker compose up -d --build
+### Access and authentication
 
-# open the UI
-xdg-open http://<host-ip>:8080
+Because the repository is private, you need credentials on the deploying host.
+
+**For the source** — a GitHub token with the `repo` scope:
+
+```bash
+gh auth login                              # easiest
+# or
+git clone https://<TOKEN>@github.com/Thorinas112/parental-gateway.git
+```
+
+**For the container image** — a Personal Access Token with `read:packages`:
+
+```bash
+# create one at https://github.com/settings/tokens/new  (scope: read:packages)
+docker login ghcr.io -u Thorinas112 --password-stdin
+```
+
+**Or skip authentication entirely** — make the repo and package public:
+
+```bash
+gh repo edit Thorinas112/parental-gateway --visibility public
+gh api -X POST user/packages/container/parental-gateway/visibility -f visibility=public
 ```
 
 **On first run there is no account at all.** The gateway detects an empty
@@ -291,7 +320,8 @@ All endpoints are JSON and live under `/api`. Authentication uses the
 parental-gateway/
 ├── .github/workflows/         # CI + release/publish pipelines
 ├── Dockerfile                 # slim Python image + iptables/iproute2/scapy tooling
-├── docker-compose.yml         # host networking + NET_ADMIN/NET_RAW
+├── docker-compose.yml         # runs the published image (host networking + caps)
+├── docker-compose.build.yml   # override: build the image from source
 ├── entrypoint.sh              # ip_forward, NAT bootstrap, interface config
 ├── requirements.txt
 ├── .env.example

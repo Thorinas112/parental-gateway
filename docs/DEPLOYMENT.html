@@ -476,18 +476,23 @@ computed and shown, but never applied.</p>
 <hr />
 <h2 id="3-docker-deployment">3. Docker deployment</h2>
 <h3 id="31-get-the-files">3.1 Get the files</h3>
+<p>The repository is currently <strong>private</strong>, so clone it with credentials (a GitHub<br />
+token with the <code>repo</code> scope, or <code>gh auth login</code>). <code>curl</code> on<br />
+<code>raw.githubusercontent.com</code> returns 404 for private repositories.</p>
 <p><strong>Using the published image</strong> (no build step, multi-arch so it works on a Pi):</p>
-<pre><code class="language-bash">mkdir -p /opt/parental-gateway &amp;&amp; cd /opt/parental-gateway
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
-</code></pre>
-<p>Then in <code>docker-compose.yml</code> replace the <code>build:</code> block with:</p>
-<pre><code class="language-yaml">    image: ghcr.io/thorinas112/parental-gateway:latest
-</code></pre>
-<p><strong>Or building from source:</strong></p>
-<pre><code class="language-bash">git clone https://github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
+<pre><code class="language-bash">gh repo clone Thorinas112/parental-gateway /opt/parental-gateway
 cd /opt/parental-gateway
 </code></pre>
+<p><code>docker-compose.yml</code> already points at <code>ghcr.io/thorinas112/parental-gateway:latest</code>,<br />
+so <code>docker compose up -d</code> pulls it. You will also need a Personal Access Token<br />
+with <code>read:packages</code> for the image:</p>
+<pre><code class="language-bash">docker login ghcr.io -u Thorinas112 --password-stdin
+</code></pre>
+<p><strong>Or building from source:</strong></p>
+<pre><code class="language-bash">git clone https://&lt;TOKEN&gt;@github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
+cd /opt/parental-gateway
+</code></pre>
+<p>then use the build override in <a href="#34-start">3.4</a>.</p>
 <h3 id="32-configure">3.2 Configure</h3>
 <pre><code class="language-bash">cp .env.example .env
 nano .env
@@ -515,7 +520,12 @@ set <code>LAN_IP_CIDR=192.168.1.1/24</code> in <code>.env</code> and let the ent
 sudo ip link set eth1 up
 </code></pre>
 <h3 id="34-start">3.4 Start</h3>
-<pre><code class="language-bash">docker compose up -d --build
+<pre><code class="language-bash"># running the published image
+docker compose up -d
+
+# ...or building from source
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
 docker compose logs -f parental-gateway
 </code></pre>
 <p>You should see:</p>
@@ -692,10 +702,13 @@ networks:
 <pre><code class="language-bash"># backup: the entire state lives in one directory
 tar czf parental-gateway-$(date +%F).tar.gz ./data .env
 
-# upgrade
-docker compose pull        # if using a published image
-docker compose up -d --build
+# upgrade (published image)
+docker compose pull
+docker compose up -d
 docker compose logs -f
+
+# upgrade (built from source)
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 # stop &amp; remove (data in ./data is preserved)
 docker compose down

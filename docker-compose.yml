@@ -1,21 +1,24 @@
 # ---------------------------------------------------------------------------
 # Parental Gateway - containerised network gateway + parental controls
 #
+# This file runs the published image. There is no build step.
+#
+#   docker compose up -d
+#   open  http://<host-ip>:8080
+#
+# To build from source instead:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
 # Default profile: `network_mode: host` so the container shares the host's
 # network stack and can genuinely forward / NAT traffic for LAN clients.
-#
-#   docker compose up -d --build
-#   open  http://<host-ip>:8080
 #
 # See docs/DEPLOYMENT.md for the full walkthrough (Docker + LXC).
 # ---------------------------------------------------------------------------
 
 services:
   parental-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: parental-gateway:latest
+    image: ghcr.io/thorinas112/parental-gateway:latest
     container_name: parental-gateway
     restart: unless-stopped
 

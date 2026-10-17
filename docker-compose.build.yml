@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# Parental Gateway - build override
+#
+# Use this when you want to build the image from source instead of pulling
+# the published one:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# or, for a faster development loop:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+#
+# Everything else (capabilities, volumes, environment) comes from
+# docker-compose.yml - this file only swaps where the image comes from.
+# ---------------------------------------------------------------------------
+
+services:
+  parental-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: parental-gateway:local

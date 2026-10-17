@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [1.0.1] - 2026-10-17
+
+### Fixed
+
+- **The documented "pull the published image" path did not work.** It used
+  `curl` against `raw.githubusercontent.com`, which returns 404 for a private
+  repository, and a `sed` command that would have left `context:`/`dockerfile:`
+  orphaned under a commented-out `build:` parent — producing invalid YAML.
+- `docker-compose.yml` now targets `ghcr.io/thorinas112/parental-gateway:latest`
+  so `docker compose up -d` pulls and runs with no editing. A new
+  `docker-compose.build.yml` override builds from source instead:
+  `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+- Documented the credentials a private repository and GHCR package require
+  (`gh auth login`, `docker login ghcr.io` with `read:packages`), plus the
+  commands to make them public if you would rather not manage tokens.
+- CI: jsdom 30 needs Node 22+ (its `undici` dependency calls APIs absent in
+  Node 20), so the matrix is Node 22/24 and `package.json` declares
+  `engines.node >=22`.
+- CI: `docker/build-push-action` with `push: false` leaves the image in buildx's
+  isolated builder; added `load: true` so the smoke test can actually run it.
+- CI: the smoke-test container now publishes its port so the health check can
+  reach it.
+
 ## [1.0.0] - 2026-10-17
 
 First release. A complete, containerised parental control and network
@@ -60,5 +83,6 @@ management gateway.
 - GitHub Actions CI across multiple Python and Node versions, plus multi-arch
   Docker publishing to GHCR.
 
-[Unreleased]: https://github.com/Thorinas112/parental-gateway/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Thorinas112/parental-gateway/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Thorinas112/parental-gateway/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Thorinas112/parental-gateway/releases/tag/v1.0.0

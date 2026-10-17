@@ -68,26 +68,33 @@ computed and shown, but never applied.
 
 ### 3.1 Get the files
 
+The repository is currently **private**, so clone it with credentials (a GitHub
+token with the `repo` scope, or `gh auth login`). `curl` on
+`raw.githubusercontent.com` returns 404 for private repositories.
+
 **Using the published image** (no build step, multi-arch so it works on a Pi):
 
 ```bash
-mkdir -p /opt/parental-gateway && cd /opt/parental-gateway
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
-curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+gh repo clone Thorinas112/parental-gateway /opt/parental-gateway
+cd /opt/parental-gateway
 ```
 
-Then in `docker-compose.yml` replace the `build:` block with:
+`docker-compose.yml` already points at `ghcr.io/thorinas112/parental-gateway:latest`,
+so `docker compose up -d` pulls it. You will also need a Personal Access Token
+with `read:packages` for the image:
 
-```yaml
-    image: ghcr.io/thorinas112/parental-gateway:latest
+```bash
+docker login ghcr.io -u Thorinas112 --password-stdin
 ```
 
 **Or building from source:**
 
 ```bash
-git clone https://github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
+git clone https://<TOKEN>@github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
 cd /opt/parental-gateway
 ```
+
+then use the build override in [3.4](#34-start).
 
 ### 3.2 Configure
 
@@ -130,7 +137,12 @@ sudo ip link set eth1 up
 ### 3.4 Start
 
 ```bash
-docker compose up -d --build
+# running the published image
+docker compose up -d
+
+# ...or building from source
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
 docker compose logs -f parental-gateway
 ```
 
@@ -372,10 +384,13 @@ Then set `SESSION_COOKIE_SECURE=1` and `WEB_PORT=8080`, and browse to
 # backup: the entire state lives in one directory
 tar czf parental-gateway-$(date +%F).tar.gz ./data .env
 
-# upgrade
-docker compose pull        # if using a published image
-docker compose up -d --build
+# upgrade (published image)
+docker compose pull
+docker compose up -d
 docker compose logs -f
+
+# upgrade (built from source)
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 # stop & remove (data in ./data is preserved)
 docker compose down
