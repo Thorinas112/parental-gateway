@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Setup · Parental Gateway</title>
+  <link rel="icon" href="{{ asset('img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+</head>
+<body class="auth-body">
+  <div class="auth-ambient" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+  </div>
+
+  <main class="setup-card">
+    <!-- ---------------- stepper ---------------- -->
+    <ol class="stepper" id="stepper">
+      <li class="step active" data-step-dot="1"><span class="step-num">1</span><span class="step-label">Welcome</span></li>
+      <li class="step" data-step-dot="2"><span class="step-num">2</span><span class="step-label">Account</span></li>
+      <li class="step" data-step-dot="3"><span class="step-num">3</span><span class="step-label">Network</span></li>
+      <li class="step" data-step-dot="4"><span class="step-num">4</span><span class="step-label">Finish</span></li>
+    </ol>
+
+    <!-- ---------------- step 1 ---------------- -->
+    <section class="wizard-step active" data-step="1">
+      <div class="setup-hero">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z"/>
+            <path d="M9.2 12.1 11.3 14l3.6-3.9"/>
+          </svg>
+        </div>
+        <h1>Welcome to Parental Gateway</h1>
+        <p class="muted">
+          This install has no administrator account yet. This wizard will create one and
+          confirm the network settings — it takes about a minute.
+        </p>
+      </div>
+
+      <div class="check-list" id="preflight">
+        <div class="check-row"><span class="dot dot-idle"></span><span>Checking gateway status…</span></div>
+      </div>
+
+      <div class="notice">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <span>Until this wizard is finished, <strong>anyone who can reach this page can claim the
+        administrator account.</strong> Complete it now before exposing the interface to your network.</span>
+      </div>
+    </section>
+
+    <!-- ---------------- step 2 ---------------- -->
+    <section class="wizard-step" data-step="2">
+      <h2 class="setup-title">Create your administrator account</h2>
+      <p class="muted">This is the only account the gateway uses. There is no default password.</p>
+
+      <div class="field">
+        <label for="su-username">Username</label>
+        <input id="su-username" type="text" autocomplete="username" autocapitalize="off"
+               autocorrect="off" spellcheck="false" maxlength="32" placeholder="e.g. admin">
+        <p class="field-hint" id="username-hint">2–32 characters: letters, numbers, dot, dash or underscore.</p>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="su-password">Password</label>
+          <button type="button" class="link-btn" id="toggle-pw" aria-pressed="false">Show</button>
+        </div>
+        <input id="su-password" type="password" autocomplete="new-password" maxlength="256">
+        <div class="strength"><span class="strength-bar" id="strength-bar"></span></div>
+        <p class="field-hint" id="password-hint">At least <span id="min-len">8</span> characters.</p>
+      </div>
+
+      <div class="field">
+        <label for="su-confirm">Confirm password</label>
+        <input id="su-confirm" type="password" autocomplete="new-password" maxlength="256">
+        <p class="field-hint" id="confirm-hint">&nbsp;</p>
+      </div>
+    </section>
+
+    <!-- ---------------- step 3 ---------------- -->
+    <section class="wizard-step" data-step="3">
+      <h2 class="setup-title">Network settings</h2>
+      <p class="muted">
+        These were auto-detected. Change them only if your gateway uses different interfaces —
+        you can edit them later from <code>data/app.db</code> settings or by re-running setup.
+      </p>
+
+      <div class="time-row">
+        <div class="field">
+          <label for="su-lan">LAN interface</label>
+          <select id="su-lan"></select>
+          <p class="field-hint">Facing your family's devices.</p>
+        </div>
+        <div class="field">
+          <label for="su-wan">WAN interface</label>
+          <select id="su-wan"></select>
+          <p class="field-hint">Facing the internet.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="su-subnet">Client subnet (CIDR)</label>
+        <input id="su-subnet" type="text" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
+        <p class="field-hint">Used for device discovery and NAT. Detected: <span id="detected-subnet">—</span></p>
+      </div>
+
+      <div class="notice notice-info">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>For enforcement to take effect, your DHCP server must hand out this gateway's IP as the
+        default route. See the <a href="/docs/deployment">Deployment Guide</a> — it stays readable while
+        you set up.</span>
+      </div>
+    </section>
+
+    <!-- ---------------- step 4 ---------------- -->
+    <section class="wizard-step" data-step="4">
+      <div class="setup-hero">
+        <div class="brand-mark brand-ok">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m5 12.5 4.5 4.5L19 7.5"/>
+          </svg>
+        </div>
+        <h1>You're all set</h1>
+        <p class="muted">The gateway is configured and your account is ready.</p>
+      </div>
+
+      <div class="kv-list" id="summary-list"></div>
+
+      <div class="notice notice-ok">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Next: press <strong>Scan</strong> on the dashboard to discover devices, then name and group them.</span>
+      </div>
+    </section>
+
+    <!-- ---------------- controls ---------------- -->
+    <p class="form-error" id="setup-error" role="alert" hidden></p>
+
+    <footer class="wizard-foot">
+      <button class="btn btn-ghost" id="btn-back" hidden>← Back</button>
+      <div class="wizard-foot-right">
+        <span class="muted" id="foot-note">Step 1 of 4</span>
+        <button class="btn btn-primary" id="btn-next">
+          <span class="btn-label">Get started</span>
+          <span class="spinner" hidden></span>
+        </button>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var step = 1;
+      var TOTAL = 4;
+      var info = null;
+
+      var $ = function (id) { return document.getElementById(id); };
+      var btnNext = $('btn-next');
+      var btnBack = $('btn-back');
+      var error = $('setup-error');
+
+      function showError(msg) {
+        error.textContent = msg || '';
+        error.hidden = !msg;
+      }
+
+      function setLoading(on, label) {
+        btnNext.disabled = on;
+        btnNext.querySelector('.spinner').hidden = !on;
+        btnNext.querySelector('.btn-label').textContent =
+          label || (step === 1 ? 'Get started' : step === TOTAL ? 'Open dashboard' : 'Continue');
+      }
+
+      function paint() {
+        Array.prototype.forEach.call(document.querySelectorAll('.wizard-step'), function (el) {
+          el.classList.toggle('active', Number(el.getAttribute('data-step')) === step);
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.step'), function (el) {
+          var n = Number(el.getAttribute('data-step-dot'));
+          el.classList.toggle('active', n === step);
+          el.classList.toggle('done', n < step);
+        });
+        btnBack.hidden = step === 1 || step === TOTAL;
+        $('foot-note').textContent = 'Step ' + step + ' of ' + TOTAL;
+        setLoading(false);
+        showError('');
+        if (step === 4) buildSummary();
+      }
+
+      function next() {
+        step = Math.min(TOTAL, step + 1);
+        paint();
+      }
+      function back() {
+        step = Math.max(1, step - 1);
+        paint();
+      }
+
+      /* ---------------- validation ---------------- */
+      function usernameOk() {
+        return /^[A-Za-z0-9._\-]{2,32}$/.test($('su-username').value.trim());
+      }
+      function passwordOk() {
+        var min = (info && info.min_password_length) || 8;
+        return $('su-password').value.length >= min;
+      }
+      function confirmOk() {
+        return $('su-password').value.length > 0 && $('su-password').value === $('su-confirm').value;
+      }
+
+      function strength(value) {
+        var score = 0;
+        if (value.length >= 8) score++;
+        if (value.length >= 12) score++;
+        if (value.length >= 16) score++;
+        if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score++;
+        if (/\d/.test(value)) score++;
+        if (/[^A-Za-z0-9]/.test(value)) score++;
+        return Math.min(4, Math.round(score * 4 / 6));
+      }
+
+      $('su-password').addEventListener('input', function () {
+        var v = this.value;
+        var s = strength(v);
+        var bar = $('strength-bar');
+        bar.className = 'strength-bar s' + s;
+        $('password-hint').textContent = v.length
+          ? ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][s]
+          : 'At least ' + ((info && info.min_password_length) || 8) + ' characters.';
+      });
+
+      $('su-confirm').addEventListener('input', function () {
+        var hint = $('confirm-hint');
+        if (!this.value) { hint.textContent = '\u00a0'; hint.className = 'field-hint'; return; }
+        if (confirmOk()) { hint.textContent = 'Passwords match.'; hint.className = 'field-hint ok'; }
+        else { hint.textContent = 'Passwords do not match.'; hint.className = 'field-hint bad'; }
+      });
+
+      $('toggle-pw').addEventListener('click', function () {
+        var pw = $('su-password');
+        var showing = pw.type === 'text';
+        pw.type = showing ? 'password' : 'text';
+        $('su-confirm').type = pw.type;
+        this.textContent = showing ? 'Show' : 'Hide';
+        this.setAttribute('aria-pressed', String(!showing));
+      });
+
+      /* ---------------- step 3 network ---------------- */
+      function fillNetwork(data) {
+        var ifaces = (data && data.interfaces) || [];
+        var net = (data && data.network) || {};
+        var rec = (data && data.recommended) || {};
+
+        function optionsFor(kind) {
+          var pick = kind === 'lan' ? rec.lan : rec.wan;
+          var html = ifaces.map(function (i) {
+            var label = i.name + (i.address ? '  —  ' + i.address : '') +
+                        (i.state === 'DOWN' ? '  (down)' : '') +
+                        (i.name === pick ? '  ✓ recommended' : '');
+            return '<option value="' + i.name + '">' + label + '</option>';
+          }).join('');
+          return html || '<option value="eth0">eth0</option>';
+        }
+
+        var lan = $('su-lan');
+        var wan = $('su-wan');
+        lan.innerHTML = optionsFor('lan');
+        wan.innerHTML = optionsFor('wan');
+        if (net.lan_iface) lan.value = net.lan_iface;
+        if (net.wan_iface) wan.value = net.wan_iface;
+
+        $('su-subnet').value = net.lan_subnet || '';
+        $('detected-subnet').textContent = (data && data.detected_subnet) || 'not detected';
+        if (data && data.default_route_iface) {
+          $('detected-subnet').textContent += ' (default route via ' + data.default_route_iface + ')';
+        }
+      }
+
+      /* ---------------- preflight ---------------- */
+      function preflight(data) {
+        var rows = [];
+        var fw = (data && data.firewall) || {};
+        rows.push(['Gateway mode', (data && data.gateway_mode) ? 'enabled' : 'disabled',
+                   (data && data.gateway_mode) ? 'ok' : 'warn']);
+        rows.push(['Detected subnet', (data && data.detected_subnet) || 'unknown',
+                   (data && data.detected_subnet) ? 'ok' : 'warn']);
+        rows.push(['Firewall backend', fw.dry_run ? 'dry-run (not enforcing)' : 'iptables ready',
+                   fw.dry_run ? 'warn' : 'ok']);
+        rows.push(['Interfaces found', String(((data && data.interfaces) || []).length), 'ok']);
+
+        $('preflight').innerHTML = rows.map(function (r) {
+          return '<div class="check-row"><span class="dot dot-' + r[2] + '"></span>' +
+                 '<span>' + r[0] + '</span><strong>' + r[1] + '</strong></div>';
+        }).join('');
+      }
+
+      /* ---------------- summary ---------------- */
+      function buildSummary() {
+        var rows = [
+          ['Administrator', $('su-username').value.trim()],
+          ['LAN interface', $('su-lan').value],
+          ['WAN interface', $('su-wan').value],
+          ['Client subnet', $('su-subnet').value || 'auto-detect'],
+          ['Firewall', (info && info.firewall && info.firewall.dry_run) ? 'dry-run' : 'enforcing']
+        ];
+        $('summary-list').innerHTML = rows.map(function (r) {
+          return '<div class="kv"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+        }).join('');
+      }
+
+      /* ---------------- submit ---------------- */
+      async function finish() {
+        setLoading(true, 'Creating account…');
+        try {
+          var response = await fetch('/api/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              username: $('su-username').value.trim(),
+              password: $('su-password').value,
+              confirm: $('su-confirm').value,
+              lan_iface: $('su-lan').value,
+              wan_iface: $('su-wan').value,
+              lan_subnet: $('su-subnet').value.trim()
+            })
+          });
+          var data = await response.json().catch(function () { return {}; });
+          if (!response.ok) throw new Error(data.error || 'Setup failed');
+          window.location.href = '/';
+        } catch (err) {
+          showError(err.message || 'Setup failed');
+          setLoading(false);
+        }
+      }
+
+      /* ---------------- navigation ---------------- */
+      btnNext.addEventListener('click', function () {
+        if (step === 1) { next(); return; }
+        if (step === 2) {
+          if (!usernameOk()) { showError('Please enter a valid username (2–32 characters).'); $('su-username').focus(); return; }
+          if (!passwordOk()) { showError('Password must be at least ' + ((info && info.min_password_length) || 8) + ' characters.'); $('su-password').focus(); return; }
+          if (!confirmOk()) { showError('Passwords do not match.'); $('su-confirm').focus(); return; }
+          next();
+          return;
+        }
+        if (step === 3) {
+          if ($('su-subnet').value.trim() && !/^[\d.]+\/\d{1,2}$/.test($('su-subnet').value.trim())) {
+            showError('Client subnet must look like 192.168.1.0/24');
+            $('su-subnet').focus();
+            return;
+          }
+          next();
+          return;
+        }
+        finish();
+      });
+      btnBack.addEventListener('click', back);
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !btnNext.disabled) { e.preventDefault(); btnNext.click(); }
+      });
+
+      /* ---------------- boot ---------------- */
+      fetch('/api/setup/status', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.required) { window.location.href = '/'; return; }
+          info = data;
+          $('min-len').textContent = data.min_password_length || 8;
+          preflight(data);
+          fillNetwork(data);
+          paint();
+        })
+        .catch(function () {
+          preflight(null);
+          paint();
+        });
+    })();
+  </script>
+</body>
+</html>

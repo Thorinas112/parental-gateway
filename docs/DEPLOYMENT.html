@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Deployment Guide · Parental Gateway</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236ee7b7' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z' fill='%230f172a'/%3E%3Cpath d='M9.2 12.1 11.3 14l3.6-3.9'/%3E%3C/svg%3E" type="image/svg+xml">
+<style>
+/* ==========================================================================
+   Parental Gateway - rendered documentation
+   Used by the in-app /docs pages and by the standalone docs/*.html files.
+   ========================================================================== */
+
+:root {
+  --bg:            #0b1120;
+  --bg-elev:       #111a2e;
+  --bg-code:       #0e1729;
+  --border:        #22304c;
+  --border-soft:   #1b2740;
+  --text:          #e6edf7;
+  --text-muted:    #8fa3bf;
+  --text-dim:      #64748b;
+  --accent:        #6366f1;
+  --accent-2:      #22d3ee;
+  --ok:            #34d399;
+  --warn:          #fbbf24;
+  --danger:        #f87171;
+  --mono:          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                   "Liberation Mono", monospace;
+  --sans:          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body.docs-body {
+  margin: 0;
+  background:
+    radial-gradient(900px 480px at 10% -10%, rgba(79, 70, 229, .12), transparent 60%),
+    radial-gradient(800px 420px at 95% 0%, rgba(14, 165, 233, .09), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------ topbar */
+.docs-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 13px 26px;
+  background: rgba(11, 17, 32, .85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.docs-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  font-size: 14.5px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.docs-brand .mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(150deg, #4f46e5, #0ea5e9);
+  color: #fff;
+  font-size: 13px;
+}
+.docs-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.docs-tab {
+  padding: 6px 13px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.docs-tab:hover { background: var(--bg-elev); color: var(--text); }
+.docs-tab.active {
+  background: rgba(99, 102, 241, .18);
+  border-color: #4338ca;
+  color: #c7d2fe;
+}
+.docs-topbar .spacer { flex: 1; }
+.docs-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.docs-back:hover { background: #1d2b48; }
+
+/* ------------------------------------------------------------------ layout */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 38px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 34px 26px 80px;
+  align-items: start;
+}
+
+/* --------------------------------------------------------------- sidebar */
+.docs-toc {
+  position: sticky;
+  top: 82px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+  padding-right: 6px;
+}
+.docs-toc h4 {
+  margin: 0 0 11px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+.docs-toc ul {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  border-left: 1px solid var(--border-soft);
+}
+.docs-toc li { margin: 0; }
+.docs-toc a {
+  display: block;
+  padding: 5px 12px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12.2px;
+  line-height: 1.45;
+  transition: color .15s, border-color .15s;
+}
+.docs-toc a:hover { color: var(--text); border-left-color: var(--accent); }
+.docs-toc .toc-l3 a { padding-left: 26px; font-size: 11.6px; }
+.docs-toc .toc-l4 a { padding-left: 38px; font-size: 11.2px; }
+
+/* --------------------------------------------------------------- content */
+.docs-content { min-width: 0; }
+.docs-content > :first-child { margin-top: 0; }
+
+.docs-content h1 {
+  font-size: 30px;
+  line-height: 1.22;
+  letter-spacing: -0.022em;
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+.docs-content h2 {
+  font-size: 21px;
+  line-height: 1.32;
+  letter-spacing: -0.014em;
+  margin: 46px 0 15px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+  font-weight: 660;
+}
+.docs-content h3 {
+  font-size: 16.5px;
+  margin: 30px 0 11px;
+  font-weight: 640;
+}
+.docs-content h4 {
+  font-size: 14.5px;
+  margin: 22px 0 9px;
+  color: var(--text-muted);
+  font-weight: 640;
+}
+
+.docs-content p { margin: 0 0 15px; }
+.docs-content a { color: var(--accent-2); text-decoration: none; }
+.docs-content a:hover { text-decoration: underline; }
+
+.docs-content strong { font-weight: 650; color: #fff; }
+.docs-content em { color: var(--text-muted); }
+
+/* anchor link on hover */
+.docs-content h2 .anchor,
+.docs-content h3 .anchor {
+  margin-left: 9px;
+  opacity: 0;
+  color: var(--text-dim);
+  font-size: .78em;
+  text-decoration: none;
+  transition: opacity .15s;
+}
+.docs-content h2:hover .anchor,
+.docs-content h3:hover .anchor { opacity: 1; }
+
+/* ---------------------------------------------------------------- lists */
+.docs-content ul, .docs-content ol { margin: 0 0 16px; padding-left: 24px; }
+.docs-content li { margin: 6px 0; }
+.docs-content li > ul, .docs-content li > ol { margin: 6px 0; }
+.docs-content ul li::marker { color: var(--accent); }
+.docs-content ol li::marker { color: var(--accent-2); font-weight: 600; }
+
+.docs-content hr {
+  border: 0;
+  height: 1px;
+  background: var(--border-soft);
+  margin: 38px 0;
+}
+
+/* --------------------------------------------------------------- tables */
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 22px;
+  font-size: 13.4px;
+  display: block;
+  overflow-x: auto;
+}
+.docs-content thead th {
+  text-align: left;
+  padding: 9px 13px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .085em;
+  color: var(--text-dim);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  background: rgba(11, 17, 32, .5);
+  white-space: nowrap;
+}
+.docs-content tbody td {
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(34, 48, 76, .55);
+  vertical-align: top;
+}
+.docs-content tbody tr:hover { background: rgba(99, 102, 241, .05); }
+.docs-content tbody tr:last-child td { border-bottom: 0; }
+.docs-content td code, .docs-content th code {
+  background: rgba(99, 102, 241, .16);
+  border-color: transparent;
+}
+
+/* ----------------------------------------------------------------- code */
+.docs-content code {
+  font-family: var(--mono);
+  font-size: .875em;
+  background: var(--bg-code);
+  border: 1px solid var(--border-soft);
+  padding: 1.5px 6px;
+  border-radius: 6px;
+  color: #a5b4fc;
+  word-break: break-word;
+}
+.docs-content pre {
+  margin: 0 0 20px;
+  padding: 15px 17px;
+  border-radius: 12px;
+  background: var(--bg-code);
+  border: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+.docs-content pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12.6px;
+  line-height: 1.68;
+  color: #b6c6e0;
+  white-space: pre;
+}
+
+/* ------------------------------------------------------------ blockquote */
+.docs-content blockquote {
+  margin: 18px 0;
+  padding: 13px 17px;
+  border-radius: 11px;
+  background: rgba(251, 191, 36, .09);
+  border: 1px solid rgba(251, 191, 36, .26);
+  border-left-width: 3px;
+  color: #fcd34d;
+}
+.docs-content blockquote p { margin: 0 0 8px; }
+.docs-content blockquote p:last-child { margin: 0; }
+.docs-content blockquote code {
+  background: rgba(0, 0, 0, .25);
+  color: #fde68a;
+}
+
+/* --------------------------------------------------------------- footer */
+.docs-foot {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 26px 46px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: 12px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.docs-foot a { color: var(--text-muted); }
+
+/* --------------------------------------------------------- print / small */
+@media (max-width: 900px) {
+  .docs-layout { grid-template-columns: 1fr; gap: 22px; padding: 24px 18px 60px; }
+  .docs-toc {
+    position: static;
+    max-height: none;
+    padding: 15px 17px;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: var(--bg-elev);
+  }
+  .docs-content h1 { font-size: 25px; }
+  .docs-content h2 { font-size: 19px; margin-top: 36px; }
+}
+
+@media print {
+  body.docs-body { background: #fff; color: #111; }
+  .docs-topbar, .docs-toc, .docs-foot { display: none; }
+  .docs-content a { color: #111; text-decoration: underline; }
+  .docs-content pre, .docs-content code { background: #f4f4f5; color: #111; border-color: #ddd; }
+}
+
+</style>
+</head>
+<body class="docs-body">
+
+<header class="docs-topbar">
+  <span class="docs-brand"><span class="mark">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+         stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z"/>
+      <path d="M9.2 12.1 11.3 14l3.6-3.9"/>
+    </svg>
+  </span>Parental Gateway</span>
+  <nav class="docs-tabs"><a class="docs-tab" href="/docs/how-it-works">How it works</a>
+      <a class="docs-tab active" href="/docs/deployment">Deployment</a>
+      <a class="docs-tab" href="/docs/readme">Reference</a></nav>
+  <div class="spacer"></div>
+  
+</header>
+
+<div class="docs-layout">
+  <aside class="docs-toc">
+    <h4>On this page</h4>
+    <div class="toc">
+<ul>
+<li class="toc-l1"><a href="#deployment-guide">Deployment Guide</a><ul>
+<li class="toc-l2"><a href="#1-choose-a-topology">1. Choose a topology</a><ul>
+<li class="toc-l3"><a href="#option-a-container-is-the-lan-gateway-recommended">Option A — Container is the LAN gateway (recommended)</a></li>
+<li class="toc-l3"><a href="#option-b-existing-router-stays-in-place-container-becomes-the-client-gateway">Option B — Existing router stays in place, container becomes the client gateway</a></li>
+<li class="toc-l3"><a href="#option-c-ui-only-no-enforcement">Option C — UI only (no enforcement)</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#2-prerequisites">2. Prerequisites</a></li>
+<li class="toc-l2"><a href="#3-docker-deployment">3. Docker deployment</a><ul>
+<li class="toc-l3"><a href="#31-get-the-files">3.1 Get the files</a></li>
+<li class="toc-l3"><a href="#32-configure">3.2 Configure</a></li>
+<li class="toc-l3"><a href="#33-host-preparation">3.3 Host preparation</a></li>
+<li class="toc-l3"><a href="#34-start">3.4 Start</a></li>
+<li class="toc-l3"><a href="#35-first-login">3.5 First login</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#4-lxc-deployment-proxmox">4. LXC deployment (Proxmox)</a><ul>
+<li class="toc-l3"><a href="#41-create-the-container">4.1 Create the container</a></li>
+<li class="toc-l3"><a href="#42-grant-the-required-capabilities">4.2 Grant the required capabilities</a></li>
+<li class="toc-l3"><a href="#43-install-docker-inside-the-lxc">4.3 Install Docker inside the LXC</a></li>
+<li class="toc-l3"><a href="#44-deploy">4.4 Deploy</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#5-point-your-clients-at-the-gateway">5. Point your clients at the gateway</a><ul>
+<li class="toc-l3"><a href="#dnsmasq-common-on-routers-pi-hole">dnsmasq (common on routers / Pi-hole)</a></li>
+<li class="toc-l3"><a href="#isc-dhcp-server">ISC DHCP Server</a></li>
+<li class="toc-l3"><a href="#kea-dhcp">Kea DHCP</a></li>
+<li class="toc-l3"><a href="#mikrotik-ubiquiti-openwrt">MikroTik / Ubiquiti / OpenWrt</a></li>
+<li class="toc-l3"><a href="#static-clients">Static clients</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#6-verify-the-setup">6. Verify the setup</a></li>
+<li class="toc-l2"><a href="#7-networking-reference">7. Networking reference</a><ul>
+<li class="toc-l3"><a href="#what-the-entrypoint-sets-up">What the entrypoint sets up</a></li>
+<li class="toc-l3"><a href="#what-the-application-manages">What the application manages</a></li>
+<li class="toc-l3"><a href="#multi-nic-with-macvlan-optional">Multi-NIC with macvlan (optional)</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#8-hardening-checklist">8. Hardening checklist</a><ul>
+<li class="toc-l3"><a href="#putting-tls-in-front-caddy-example">Putting TLS in front (Caddy example)</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#9-backup-upgrade-removal">9. Backup, upgrade, removal</a></li>
+<li class="toc-l2"><a href="#appendix-scriptssetup-gatewaysh">Appendix: scripts/setup-gateway.sh</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+  </aside>
+  <article class="docs-content">
+<h1 id="deployment-guide">Deployment Guide</h1>
+<p>This guide takes you from a clean host to a working <strong>Parental Gateway</strong> that<br />
+actually routes and filters your family's traffic.</p>
+<ul>
+<li><a href="#1-choose-a-topology">1. Choose a topology</a></li>
+<li><a href="#2-prerequisites">2. Prerequisites</a></li>
+<li><a href="#3-docker-deployment">3. Docker deployment</a></li>
+<li><a href="#4-lxc-deployment-proxmox">4. LXC deployment (Proxmox)</a></li>
+<li><a href="#5-point-your-clients-at-the-gateway">5. Point your clients at the gateway</a></li>
+<li><a href="#6-verify-the-setup">6. Verify the setup</a></li>
+<li><a href="#7-networking-reference">7. Networking reference</a></li>
+<li><a href="#8-hardening-checklist">8. Hardening checklist</a></li>
+<li><a href="#9-backup-upgrade-removal">9. Backup, upgrade, removal</a></li>
+</ul>
+<hr />
+<h2 id="1-choose-a-topology">1. Choose a topology</h2>
+<h3 id="option-a-container-is-the-lan-gateway-recommended">Option A — Container is the LAN gateway (recommended)</h3>
+<pre><code>        [Internet]
+             │
+        ┌────┴─────┐
+        │  Router   │  (modem/ONT, NAT disabled or in bridge mode)
+        └────┬──────┘
+             │ WAN interface (eth0)
+   ┌─────────┴──────────────────────────┐
+   │        Parental Gateway            │  ← this container
+   │   IP forwarding + NAT + PCTRL      │
+   └─────────┬──────────────────────────┘
+             │ LAN interface (eth1 / br0)
+        ┌────┴──────────────────────┐
+        │   Switch / Access Point    │
+        └────┬───────┬───────┬──────┘
+          phones   laptops   TVs
+</code></pre>
+<p>The container has two roles: it hands out addresses (or your existing DHCP<br />
+server points clients at it) and it is the <strong>default gateway</strong> for every<br />
+device. Nothing can bypass it.</p>
+<h3 id="option-b-existing-router-stays-in-place-container-becomes-the-client-gateway">Option B — Existing router stays in place, container becomes the client gateway</h3>
+<p>Keep your router's DHCP, but set the <strong>router option (option 3 / "gateway")</strong><br />
+to the container's IP. The container NATs out to the router. Simple, and it is<br />
+the least disruptive option on most home networks.</p>
+<h3 id="option-c-ui-only-no-enforcement">Option C — UI only (no enforcement)</h3>
+<p>Run the container in bridge networking with <code>GATEWAY_MODE=0</code> and<br />
+<code>FIREWALL_MODE=off</code> to evaluate the interface before committing. Rules are<br />
+computed and shown, but never applied.</p>
+<hr />
+<h2 id="2-prerequisites">2. Prerequisites</h2>
+<ul>
+<li>A Linux host with Docker <strong>or</strong> an LXC container you can grant capabilities to</li>
+<li>At least one network interface on your LAN</li>
+<li>Your router/firewall able to hand out the container's IP as the default gateway</li>
+<li>~512 MB RAM, 100 MB disk</li>
+</ul>
+<hr />
+<h2 id="3-docker-deployment">3. Docker deployment</h2>
+<h3 id="31-get-the-files">3.1 Get the files</h3>
+<pre><code class="language-bash">mkdir -p /opt/parental-gateway &amp;&amp; cd /opt/parental-gateway
+# copy the project files here, or:
+# git clone &lt;repo&gt; ./
+</code></pre>
+<h3 id="32-configure">3.2 Configure</h3>
+<pre><code class="language-bash">cp .env.example .env
+nano .env
+</code></pre>
+<p>At minimum set:</p>
+<pre><code class="language-bash">ADMIN_PASSWORD=&lt;a long random password&gt;
+SECRET_KEY=&lt;32+ random characters&gt;
+LAN_IFACE=eth1        # interface facing your clients
+WAN_IFACE=eth0        # interface facing the internet
+LAN_SUBNET=192.168.1.0/24
+TZ=Europe/London
+</code></pre>
+<h3 id="33-host-preparation">3.3 Host preparation</h3>
+<pre><code class="language-bash"># let the container route (also applied by the entrypoint)
+sudo sysctl -w net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-parental-gateway.conf
+
+# if you run ufw/firewalld, allow forwarding and the web port
+sudo ufw route allow in on eth1 out on eth0
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
+</code></pre>
+<p>If you use <strong>Option A</strong> with a dedicated LAN NIC, give it an address now (or<br />
+set <code>LAN_IP_CIDR=192.168.1.1/24</code> in <code>.env</code> and let the entrypoint do it):</p>
+<pre><code class="language-bash">sudo ip addr replace 192.168.1.1/24 dev eth1
+sudo ip link set eth1 up
+</code></pre>
+<h3 id="34-start">3.4 Start</h3>
+<pre><code class="language-bash">docker compose up -d --build
+docker compose logs -f parental-gateway
+</code></pre>
+<p>You should see:</p>
+<pre><code>[entrypoint] net.ipv4.ip_forward = 1 (via /proc)
+[entrypoint] auto-detected LAN_SUBNET=192.168.1.0/24 on eth1
+[entrypoint] NAT: MASQUERADE 192.168.1.0/24 -&gt; eth0
+pg.db          database ready at /app/data/app.db
+pg.auth        created bootstrap user 'admin'
+pg.gateway     Gateway bootstrap: {...}
+</code></pre>
+<h3 id="35-first-login">3.5 First login</h3>
+<p>Open <code>http://&lt;host-ip&gt;:8080</code>, sign in as <code>admin</code> with the password from <code>.env</code>,<br />
+then press <strong>Scan</strong>.</p>
+<hr />
+<h2 id="4-lxc-deployment-proxmox">4. LXC deployment (Proxmox)</h2>
+<p>Docker inside an LXC works well; you can also run the app directly in the<br />
+container. Either way the LXC <strong>must not be unprivileged-only</strong> in a way that<br />
+strips <code>NET_ADMIN</code>.</p>
+<h3 id="41-create-the-container">4.1 Create the container</h3>
+<ul>
+<li>Template: Debian 12 / Ubuntu 24.04</li>
+<li>Disk: 4 GB, RAM: 512 MB–1 GB, CPU: 1–2 cores</li>
+<li>Network: attach a <strong>bridged</strong> NIC to your LAN bridge (<code>vmbr1</code>)</li>
+<li>Unprivileged: <strong>off</strong> (or keep it on and add the nesting/idmap settings below)</li>
+</ul>
+<h3 id="42-grant-the-required-capabilities">4.2 Grant the required capabilities</h3>
+<p>On the <strong>Proxmox host</strong>, edit <code>/etc/pve/lxc/&lt;CTID&gt;.conf</code>:</p>
+<pre><code>lxc.cap.drop:
+lxc.cap.drop: mknod
+lxc.mount.entry: /lib/modules lib/modules none bind,optional 0 0
+lxc.apparmor.profile: unconfined
+</code></pre>
+<p>Then restart the container. Confirm inside it:</p>
+<pre><code class="language-bash">ip link                      # should list your real interfaces
+sysctl net.ipv4.ip_forward   # must be writable
+</code></pre>
+<h3 id="43-install-docker-inside-the-lxc">4.3 Install Docker inside the LXC</h3>
+<pre><code class="language-bash">apt update &amp;&amp; apt install -y curl ca-certificates
+curl -fsSL https://get.docker.com | sh
+systemctl enable --now docker
+</code></pre>
+<h3 id="44-deploy">4.4 Deploy</h3>
+<p>Follow <a href="#3-docker-deployment">section 3</a> using <code>docker compose</code>.</p>
+<blockquote>
+<p><strong>Alternative — bare Python in the LXC:</strong> install<br />
+<code>python3 python3-venv iptables iproute2 libpcap0.8</code>, create a venv,<br />
+<code>pip install -r requirements.txt</code>, then run <code>entrypoint.sh</code> via a systemd<br />
+unit. The entrypoint is plain bash and works without Docker.</p>
+</blockquote>
+<hr />
+<h2 id="5-point-your-clients-at-the-gateway">5. Point your clients at the gateway</h2>
+<p>Enforcement happens in the <code>FORWARD</code> path — clients must <strong>route through</strong> the<br />
+container.</p>
+<h3 id="dnsmasq-common-on-routers-pi-hole">dnsmasq (common on routers / Pi-hole)</h3>
+<pre><code class="language-conf"># /etc/dnsmasq.d/parental-gateway.conf
+dhcp-option=option:router,192.168.1.1
+dhcp-option=option:dns-server,192.168.1.1
+</code></pre>
+<h3 id="isc-dhcp-server">ISC DHCP Server</h3>
+<pre><code>option routers 192.168.1.1;
+option domain-name-servers 192.168.1.1;
+</code></pre>
+<h3 id="kea-dhcp">Kea DHCP</h3>
+<pre><code class="language-json">&quot;option-data&quot;: [
+  { &quot;name&quot;: &quot;routers&quot;, &quot;data&quot;: &quot;192.168.1.1&quot; },
+  { &quot;name&quot;: &quot;domain-name-servers&quot;, &quot;data&quot;: &quot;192.168.1.1&quot; }
+]
+</code></pre>
+<h3 id="mikrotik-ubiquiti-openwrt">MikroTik / Ubiquiti / OpenWrt</h3>
+<p>Set the LAN <strong>DHCP Gateway</strong> (option 3) to <code>192.168.1.1</code>. In OpenWrt this is<br />
+<em>Network → Interfaces → LAN → DHCP Server → Advanced → DHCP-Options</em>: <code>3,192.168.1.1</code>.</p>
+<h3 id="static-clients">Static clients</h3>
+<p>Set the default gateway (and ideally DNS) to <code>192.168.1.1</code> manually.</p>
+<blockquote>
+<p><strong>Tip:</strong> renew the lease on each device afterwards (<code>ipconfig /renew</code>,<br />
+<code>dhclient -r &amp;&amp; dhclient</code>, or toggle Wi-Fi) so the new gateway is picked up.</p>
+</blockquote>
+<p>If you want the container to also answer DNS, run dnsmasq or unbound on it and<br />
+point clients at it — or keep DNS on the router and just route through the<br />
+container.</p>
+<hr />
+<h2 id="6-verify-the-setup">6. Verify the setup</h2>
+<p>From a client device:</p>
+<pre><code class="language-bash"># 1. default route points at the container
+ip route | grep default
+#   default via 192.168.1.1 ...
+
+# 2. it is forwarding
+ping -c3 1.1.1.1
+
+# 3. it is NATing (from the container)
+docker exec parental-gateway iptables -t nat -S POSTROUTING
+#   -A POSTROUTING -s 192.168.1.0/24 -o eth0 -j MASQUERADE
+</code></pre>
+<p>Then in the UI:</p>
+<ol>
+<li><strong>Scan</strong> — the client should appear with its MAC.</li>
+<li>Rename it, add it to a group.</li>
+<li>Toggle <strong>Block all</strong> on that group.</li>
+<li>Within a few seconds the client should lose internet:<br />
+<code>bash
+   docker exec parental-gateway iptables -S PCTRL
+   -N PCTRL
+   -A PCTRL -m mac --mac-source AA:BB:CC:DD:EE:01 -j DROP
+   -A PCTRL -j RETURN</code></li>
+<li>Press <strong>Apply</strong> or wait for the auto-reconcile if it did not take effect.</li>
+</ol>
+<hr />
+<h2 id="7-networking-reference">7. Networking reference</h2>
+<h3 id="what-the-entrypoint-sets-up">What the entrypoint sets up</h3>
+<pre><code class="language-bash"># forwarding
+sysctl -w net.ipv4.ip_forward=1
+
+# NAT: masquerade LAN traffic out of the WAN interface
+iptables -t nat -A POSTROUTING -s 192.168.1.0/24 -o eth0 -j MASQUERADE
+
+# allow return traffic
+iptables -I FORWARD 1 -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# allow LAN -&gt; WAN
+iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+</code></pre>
+<h3 id="what-the-application-manages">What the application manages</h3>
+<p>A single chain, jumped to from the top of <code>FORWARD</code>:</p>
+<pre><code>-N PCTRL
+-A FORWARD -j PCTRL
+-A PCTRL -m mac --mac-source AA:BB:CC:DD:EE:01 -j DROP   ← blocked device
+-A PCTRL -j RETURN
+</code></pre>
+<p>Because <code>PCTRL</code> is inserted at <strong>position 1</strong>, it always sees the packet first.<br />
+Removing a device from the UI removes its rule on the next reconcile.</p>
+<h3 id="multi-nic-with-macvlan-optional">Multi-NIC with macvlan (optional)</h3>
+<p>If you want the container to have its own IP on the LAN rather than using the<br />
+host's:</p>
+<pre><code class="language-yaml"># docker-compose override
+services:
+  parental-gateway:
+    networks:
+      lan_net:
+        ipv4_address: 192.168.1.1
+
+networks:
+  lan_net:
+    driver: macvlan
+    driver_opts:
+      parent: eth1
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.254
+</code></pre>
+<p>Remove <code>network_mode: host</code> when you do this, and keep<br />
+<code>cap_add: [NET_ADMIN, NET_RAW]</code>.</p>
+<hr />
+<h2 id="8-hardening-checklist">8. Hardening checklist</h2>
+<ul>
+<li>[ ] <code>ADMIN_PASSWORD</code> changed from the default</li>
+<li>[ ] <code>SECRET_KEY</code> set to a long random value (keeps sessions across rebuilds)</li>
+<li>[ ] <code>SESSION_COOKIE_SECURE=1</code> if you front the UI with TLS (Caddy/nginx)</li>
+<li>[ ] Web UI bound to the LAN only, or firewall the port to your subnet</li>
+<li>[ ] <code>./data</code> volume backed up and not world-readable</li>
+<li>[ ] Host <code>unattended-upgrades</code> (or equivalent) enabled</li>
+<li>[ ] Family members told the network is filtered</li>
+</ul>
+<h3 id="putting-tls-in-front-caddy-example">Putting TLS in front (Caddy example)</h3>
+<pre><code>gateway.home.lan {
+    reverse_proxy 127.0.0.1:8080
+}
+</code></pre>
+<p>Then set <code>SESSION_COOKIE_SECURE=1</code> and <code>WEB_PORT=8080</code>, and browse to<br />
+<code>https://gateway.home.lan</code>.</p>
+<hr />
+<h2 id="9-backup-upgrade-removal">9. Backup, upgrade, removal</h2>
+<pre><code class="language-bash"># backup: the entire state lives in one directory
+tar czf parental-gateway-$(date +%F).tar.gz ./data .env
+
+# upgrade
+docker compose pull        # if using a published image
+docker compose up -d --build
+docker compose logs -f
+
+# stop &amp; remove (data in ./data is preserved)
+docker compose down
+
+# full removal
+docker compose down -v &amp;&amp; rm -rf ./data
+</code></pre>
+<p>The SQLite database (<code>data/app.db</code>) holds devices, names, groups, schedules and<br />
+sessions. The generated signing key lives in <code>data/secret.key</code>.</p>
+<hr />
+<h2 id="appendix-scriptssetup-gatewaysh">Appendix: <code>scripts/setup-gateway.sh</code></h2>
+<p>A convenience script for the <strong>host</strong> that enables forwarding, optionally<br />
+assigns the LAN address and prints the exact <code>iptables</code> lines for your subnet:</p>
+<pre><code class="language-bash">sudo ./scripts/setup-gateway.sh --lan eth1 --wan eth0 --subnet 192.168.1.0/24
+</code></pre>
+<p>It only writes kernel sysctls and prints commands — it never modifies the<br />
+application's managed chain.</p>
+  </article>
+</div>
+
+<footer class="docs-foot">
+  <span>Parental Gateway documentation</span>
+  <a href="HOW_IT_WORKS.html">How It Works</a>
+  <a href="DEPLOYMENT.html">Deployment Guide</a>
+  <a href="README.html">README</a>
+</footer>
+
+</body>
+</html>

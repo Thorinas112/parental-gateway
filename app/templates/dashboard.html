@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Parental Gateway · Dashboard</title>
+  <link rel="icon" href="{{ asset('img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+</head>
+<body class="app-body">
+
+<!-- ===================== top bar ===================== -->
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z"/>
+        <path d="M9.2 12.1 11.3 14l3.6-3.9"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <strong>Parental Gateway</strong>
+      <span class="muted" id="clock">—</span>
+    </div>
+  </div>
+
+  <div class="topbar-status" id="topbar-status">
+    <span class="pill" id="pill-gateway"><span class="dot"></span>Gateway</span>
+    <span class="pill" id="pill-firewall"><span class="dot"></span>Firewall</span>
+    <span class="pill pill-accent" id="pill-blocked"><span class="dot"></span>Blocked 0</span>
+  </div>
+
+  <div class="topbar-actions">
+    <a class="btn btn-ghost" href="/docs" target="_blank" rel="noopener" title="Open the documentation">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5Z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5Z"/></svg>
+      <span>Docs</span>
+    </a>
+    <button class="btn btn-ghost" id="btn-scan" title="Scan the local subnet for devices">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span>Scan</span>
+    </button>
+    <button class="btn btn-ghost" id="btn-reconcile" title="Re-apply firewall rules now">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.6"/><path d="M20 5v6h-6"/></svg>
+      <span>Apply</span>
+    </button>
+    <div class="user-chip">
+      <span class="avatar" id="user-avatar">?</span>
+      <span id="user-name">…</span>
+      <button class="icon-btn" id="btn-logout" title="Sign out">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== summary ===================== -->
+<section class="stat-row" id="stat-row">
+  <article class="stat-card">
+    <div class="stat-label">Devices</div>
+    <div class="stat-value" id="stat-devices">0</div>
+    <div class="stat-sub muted"><span id="stat-online">0</span> online now</div>
+  </article>
+  <article class="stat-card">
+    <div class="stat-label">Groups</div>
+    <div class="stat-value" id="stat-groups">0</div>
+    <div class="stat-sub muted">device profiles</div>
+  </article>
+  <article class="stat-card">
+    <div class="stat-label">Blocked</div>
+    <div class="stat-value text-danger" id="stat-blocked">0</div>
+    <div class="stat-sub muted">devices offline</div>
+  </article>
+  <article class="stat-card">
+    <div class="stat-label">Active timers</div>
+    <div class="stat-value text-warning" id="stat-timers">0</div>
+    <div class="stat-sub muted">pause / allow windows</div>
+  </article>
+</section>
+
+<!-- ===================== active timers ===================== -->
+<section class="panel panel-timers" id="timers-panel" hidden>
+  <div class="panel-head">
+    <h2>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Active timers
+    </h2>
+  </div>
+  <div class="timer-strip" id="timer-strip"></div>
+</section>
+
+<!-- ===================== main grid ===================== -->
+<div class="layout">
+
+  <!-- groups -->
+  <section class="panel" id="groups-panel">
+    <div class="panel-head">
+      <h2>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"/><circle cx="10" cy="8" r="3.2"/><path d="M20 20v-1.5a3.5 3.5 0 0 0-2.6-3.4"/><path d="M15.5 5.2a3.2 3.2 0 0 1 0 5.6"/></svg>
+        Groups &amp; profiles
+      </h2>
+      <button class="btn btn-sm btn-primary" id="btn-new-group">+ New group</button>
+    </div>
+    <div class="group-grid" id="group-grid"></div>
+    <p class="empty muted" id="groups-empty" hidden>No groups yet — create one to organise devices.</p>
+  </section>
+
+  <!-- devices -->
+  <section class="panel" id="devices-panel">
+    <div class="panel-head">
+      <h2>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16.5V20"/></svg>
+        Devices
+      </h2>
+      <div class="panel-tools">
+        <input class="input input-search" id="device-search" type="search" placeholder="Search name, IP or MAC…">
+        <select class="input input-select" id="device-filter">
+          <option value="all">All devices</option>
+          <option value="online">Online</option>
+          <option value="blocked">Blocked</option>
+          <option value="ungrouped">Ungrouped</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" id="device-table">
+        <thead>
+          <tr>
+            <th class="col-status"></th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>MAC</th>
+            <th>Group</th>
+            <th class="col-reason">Reason</th>
+            <th class="col-actions">Access</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="device-body"></tbody>
+      </table>
+    </div>
+    <p class="empty muted" id="devices-empty" hidden>No devices discovered yet. Press <strong>Scan</strong> to search the network.</p>
+  </section>
+
+  <!-- schedules -->
+  <section class="panel" id="schedules-panel">
+    <div class="panel-head">
+      <h2>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+        Weekly schedules
+      </h2>
+      <button class="btn btn-sm btn-primary" id="btn-new-schedule">+ Add schedule</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="schedule-table">
+        <thead>
+          <tr>
+            <th>Schedule</th>
+            <th>Group</th>
+            <th>Days</th>
+            <th>Window</th>
+            <th>State</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="schedule-body"></tbody>
+      </table>
+    </div>
+    <p class="empty muted" id="schedules-empty" hidden>No schedules defined. Add one to automatically pause a group at bedtime.</p>
+  </section>
+
+  <!-- system -->
+  <section class="panel" id="system-panel">
+    <div class="panel-head">
+      <h2>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H10a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V10a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        Gateway &amp; firewall
+      </h2>
+      <div class="panel-tools">
+        <button class="btn btn-sm btn-ghost" id="btn-rules">Refresh rules</button>
+      </div>
+    </div>
+
+    <div class="system-grid">
+      <div class="kv-list" id="system-kv"></div>
+      <div class="rules-box">
+        <div class="rules-tabs">
+          <button class="tab active" data-rules-tab="filter">filter</button>
+          <button class="tab" data-rules-tab="nat">nat</button>
+        </div>
+        <pre class="rules-pre" id="rules-pre">Press “Refresh rules” to inspect the live iptables ruleset.</pre>
+      </div>
+    </div>
+
+    <div class="activity">
+      <h3>Activity</h3>
+      <ul class="activity-list" id="activity-list"></ul>
+    </div>
+  </section>
+</div>
+
+<!-- ===================== modal ===================== -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h3 id="modal-title">Dialog</h3>
+      <button class="icon-btn" id="modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+
+<!-- ===================== toasts ===================== -->
+<div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+<script src="{{ asset('js/app.js') }}"></script>
+</body>
+</html>

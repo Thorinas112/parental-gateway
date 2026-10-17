@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Sign in · Parental Gateway</title>
+  <link rel="icon" href="{{ asset('img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+</head>
+<body class="auth-body">
+  <div class="auth-ambient" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+  </div>
+
+  <main class="auth-card">
+    <div class="auth-brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z"/>
+          <path d="M9.2 12.1 11.3 14l3.6-3.9"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Parental Gateway</h1>
+        <p class="muted">Network management &amp; family controls</p>
+      </div>
+    </div>
+
+    <form id="login-form" autocomplete="on" novalidate>
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username"
+               autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="password">Password</label>
+          <button type="button" id="toggle-pw" class="link-btn" aria-pressed="false">Show</button>
+        </div>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+
+      <button class="btn btn-primary btn-block" type="submit" id="submit-btn">
+        <span class="btn-label">Sign in</span>
+        <span class="spinner" hidden></span>
+      </button>
+
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+    </form>
+
+    <footer class="auth-foot">
+      <span class="dot dot-ok"></span>
+      <span id="foot-status">Checking gateway status…</span>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const form = document.getElementById('login-form');
+      const error = document.getElementById('login-error');
+      const submit = document.getElementById('submit-btn');
+      const toggle = document.getElementById('toggle-pw');
+      const pw = document.getElementById('password');
+
+      toggle.addEventListener('click', function () {
+        const showing = pw.type === 'text';
+        pw.type = showing ? 'password' : 'text';
+        toggle.textContent = showing ? 'Show' : 'Hide';
+        toggle.setAttribute('aria-pressed', String(!showing));
+      });
+
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        error.hidden = true;
+        submit.disabled = true;
+        submit.querySelector('.spinner').hidden = false;
+        submit.querySelector('.btn-label').textContent = 'Signing in…';
+
+        try {
+          const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              username: document.getElementById('username').value.trim(),
+              password: pw.value
+            })
+          });
+          const data = await response.json().catch(function () { return {}; });
+          if (!response.ok) {
+            throw new Error(data.error || 'Sign in failed');
+          }
+          window.location.href = '/';
+        } catch (err) {
+          error.textContent = err.message || 'Sign in failed';
+          error.hidden = false;
+          submit.disabled = false;
+          submit.querySelector('.spinner').hidden = true;
+          submit.querySelector('.btn-label').textContent = 'Sign in';
+        }
+      });
+
+      fetch('/healthz', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function () {
+          document.getElementById('foot-status').textContent = 'Gateway reachable';
+        })
+        .catch(function () {
+          document.getElementById('foot-status').textContent = 'Gateway status unknown';
+        });
+    })();
+  </script>
+</body>
+</html>

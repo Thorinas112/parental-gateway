@@ -1,0 +1,20 @@
+# Normalise line endings in the repository
+* text=auto
+
+# Shell scripts and the Dockerfile MUST have LF endings or Linux refuses to
+# execute them ("bad interpreter: /bin/bash^M").
+*.sh       text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+
+# Images and other binaries
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.stl  binary
+*.pdf  binary

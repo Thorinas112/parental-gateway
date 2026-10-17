@@ -1,0 +1,94 @@
+# ---------------------------------------------------------------------------
+# Parental Gateway - containerised network gateway + parental controls
+#
+# Default profile: `network_mode: host` so the container shares the host's
+# network stack and can genuinely forward / NAT traffic for LAN clients.
+#
+#   docker compose up -d --build
+#   open  http://<host-ip>:8080
+#
+# See docs/DEPLOYMENT.md for the full walkthrough (Docker + LXC).
+# ---------------------------------------------------------------------------
+
+services:
+  parental-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: parental-gateway:latest
+    container_name: parental-gateway
+    restart: unless-stopped
+
+    # Host networking is required for gateway mode: the container must see
+    # the real LAN interface to ARP-scan it and to forward client traffic.
+    network_mode: host
+
+    # NET_ADMIN -> iptables, NAT, sysctl, interface configuration
+    # NET_RAW   -> raw sockets used by scapy for ARP discovery
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    # NOTE: with `network_mode: host` the container shares the host's network
+    # namespace, so Docker refuses per-container `net.*` sysctls
+    # ("sysctl ... not allowed in host network namespace"). IP forwarding is
+    # enabled by entrypoint.sh instead (it runs with NET_ADMIN).
+    # For bridge networking, add:
+    #   sysctls:
+    #     net.ipv4.ip_forward: "1"
+
+    environment:
+      TZ: ${TZ:-UTC}
+      WEB_PORT: ${WEB_PORT:-8080}
+
+      # --- authentication -------------------------------------------------
+      # Leave ADMIN_PASSWORD blank to launch the first-run setup wizard in the
+      # browser (recommended). Set it to auto-provision the account instead.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      REQUIRE_SETUP_WIZARD: ${REQUIRE_SETUP_WIZARD:-0}
+      SECRET_KEY: ${SECRET_KEY:-}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+
+      # --- gateway / networking ------------------------------------------
+      GATEWAY_MODE: ${GATEWAY_MODE:-1}
+      LAN_IFACE: ${LAN_IFACE:-eth0}
+      WAN_IFACE: ${WAN_IFACE:-eth0}
+      LAN_SUBNET: ${LAN_SUBNET:-}
+      LAN_IP_CIDR: ${LAN_IP_CIDR:-}
+
+      # --- behaviour ------------------------------------------------------
+      SCAN_INTERVAL_MINUTES: ${SCAN_INTERVAL_MINUTES:-10}
+      RECONCILE_INTERVAL_SECONDS: ${RECONCILE_INTERVAL_SECONDS:-20}
+      ONLINE_WINDOW_MINUTES: ${ONLINE_WINDOW_MINUTES:-5}
+      FIREWALL_MODE: ${FIREWALL_MODE:-auto}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+    volumes:
+      # SQLite database, generated secret key, scan history
+      - ./data:/app/data
+      # Kernel modules (conntrack helpers) - harmless if absent
+      - /lib/modules:/lib/modules:ro
+
+    labels:
+      - "com.parental-gateway.description=Parental control & network management gateway"
+
+# ---------------------------------------------------------------------------
+# ALTERNATIVE: bridge networking (UI testing only - NOT a real gateway)
+# ---------------------------------------------------------------------------
+# The service below keeps the container on the default Docker bridge so you
+# can exercise the interface on a machine where host networking is not
+# available. In this mode ARP discovery and MAC-based enforcement only see
+# Docker's own network, so gateway features are effectively disabled.
+#
+#  services:
+#    parental-gateway:
+#      build: .
+#      ports:
+#        - "8080:8080"
+#      cap_add: [NET_ADMIN, NET_RAW]
+#      environment:
+#        GATEWAY_MODE: "0"
+#        FIREWALL_MODE: "off"
+#      volumes:
+#        - ./data:/app/data

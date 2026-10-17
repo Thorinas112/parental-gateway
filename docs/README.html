@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>README · Parental Gateway</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236ee7b7' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z' fill='%230f172a'/%3E%3Cpath d='M9.2 12.1 11.3 14l3.6-3.9'/%3E%3C/svg%3E" type="image/svg+xml">
+<style>
+/* ==========================================================================
+   Parental Gateway - rendered documentation
+   Used by the in-app /docs pages and by the standalone docs/*.html files.
+   ========================================================================== */
+
+:root {
+  --bg:            #0b1120;
+  --bg-elev:       #111a2e;
+  --bg-code:       #0e1729;
+  --border:        #22304c;
+  --border-soft:   #1b2740;
+  --text:          #e6edf7;
+  --text-muted:    #8fa3bf;
+  --text-dim:      #64748b;
+  --accent:        #6366f1;
+  --accent-2:      #22d3ee;
+  --ok:            #34d399;
+  --warn:          #fbbf24;
+  --danger:        #f87171;
+  --mono:          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                   "Liberation Mono", monospace;
+  --sans:          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body.docs-body {
+  margin: 0;
+  background:
+    radial-gradient(900px 480px at 10% -10%, rgba(79, 70, 229, .12), transparent 60%),
+    radial-gradient(800px 420px at 95% 0%, rgba(14, 165, 233, .09), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------ topbar */
+.docs-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 13px 26px;
+  background: rgba(11, 17, 32, .85);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.docs-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+  font-size: 14.5px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.docs-brand .mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(150deg, #4f46e5, #0ea5e9);
+  color: #fff;
+  font-size: 13px;
+}
+.docs-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.docs-tab {
+  padding: 6px 13px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.docs-tab:hover { background: var(--bg-elev); color: var(--text); }
+.docs-tab.active {
+  background: rgba(99, 102, 241, .18);
+  border-color: #4338ca;
+  color: #c7d2fe;
+}
+.docs-topbar .spacer { flex: 1; }
+.docs-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.docs-back:hover { background: #1d2b48; }
+
+/* ------------------------------------------------------------------ layout */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 38px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 34px 26px 80px;
+  align-items: start;
+}
+
+/* --------------------------------------------------------------- sidebar */
+.docs-toc {
+  position: sticky;
+  top: 82px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+  padding-right: 6px;
+}
+.docs-toc h4 {
+  margin: 0 0 11px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+.docs-toc ul {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  border-left: 1px solid var(--border-soft);
+}
+.docs-toc li { margin: 0; }
+.docs-toc a {
+  display: block;
+  padding: 5px 12px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12.2px;
+  line-height: 1.45;
+  transition: color .15s, border-color .15s;
+}
+.docs-toc a:hover { color: var(--text); border-left-color: var(--accent); }
+.docs-toc .toc-l3 a { padding-left: 26px; font-size: 11.6px; }
+.docs-toc .toc-l4 a { padding-left: 38px; font-size: 11.2px; }
+
+/* --------------------------------------------------------------- content */
+.docs-content { min-width: 0; }
+.docs-content > :first-child { margin-top: 0; }
+
+.docs-content h1 {
+  font-size: 30px;
+  line-height: 1.22;
+  letter-spacing: -0.022em;
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+.docs-content h2 {
+  font-size: 21px;
+  line-height: 1.32;
+  letter-spacing: -0.014em;
+  margin: 46px 0 15px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+  font-weight: 660;
+}
+.docs-content h3 {
+  font-size: 16.5px;
+  margin: 30px 0 11px;
+  font-weight: 640;
+}
+.docs-content h4 {
+  font-size: 14.5px;
+  margin: 22px 0 9px;
+  color: var(--text-muted);
+  font-weight: 640;
+}
+
+.docs-content p { margin: 0 0 15px; }
+.docs-content a { color: var(--accent-2); text-decoration: none; }
+.docs-content a:hover { text-decoration: underline; }
+
+.docs-content strong { font-weight: 650; color: #fff; }
+.docs-content em { color: var(--text-muted); }
+
+/* anchor link on hover */
+.docs-content h2 .anchor,
+.docs-content h3 .anchor {
+  margin-left: 9px;
+  opacity: 0;
+  color: var(--text-dim);
+  font-size: .78em;
+  text-decoration: none;
+  transition: opacity .15s;
+}
+.docs-content h2:hover .anchor,
+.docs-content h3:hover .anchor { opacity: 1; }
+
+/* ---------------------------------------------------------------- lists */
+.docs-content ul, .docs-content ol { margin: 0 0 16px; padding-left: 24px; }
+.docs-content li { margin: 6px 0; }
+.docs-content li > ul, .docs-content li > ol { margin: 6px 0; }
+.docs-content ul li::marker { color: var(--accent); }
+.docs-content ol li::marker { color: var(--accent-2); font-weight: 600; }
+
+.docs-content hr {
+  border: 0;
+  height: 1px;
+  background: var(--border-soft);
+  margin: 38px 0;
+}
+
+/* --------------------------------------------------------------- tables */
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 22px;
+  font-size: 13.4px;
+  display: block;
+  overflow-x: auto;
+}
+.docs-content thead th {
+  text-align: left;
+  padding: 9px 13px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .085em;
+  color: var(--text-dim);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  background: rgba(11, 17, 32, .5);
+  white-space: nowrap;
+}
+.docs-content tbody td {
+  padding: 10px 13px;
+  border-bottom: 1px solid rgba(34, 48, 76, .55);
+  vertical-align: top;
+}
+.docs-content tbody tr:hover { background: rgba(99, 102, 241, .05); }
+.docs-content tbody tr:last-child td { border-bottom: 0; }
+.docs-content td code, .docs-content th code {
+  background: rgba(99, 102, 241, .16);
+  border-color: transparent;
+}
+
+/* ----------------------------------------------------------------- code */
+.docs-content code {
+  font-family: var(--mono);
+  font-size: .875em;
+  background: var(--bg-code);
+  border: 1px solid var(--border-soft);
+  padding: 1.5px 6px;
+  border-radius: 6px;
+  color: #a5b4fc;
+  word-break: break-word;
+}
+.docs-content pre {
+  margin: 0 0 20px;
+  padding: 15px 17px;
+  border-radius: 12px;
+  background: var(--bg-code);
+  border: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+.docs-content pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 12.6px;
+  line-height: 1.68;
+  color: #b6c6e0;
+  white-space: pre;
+}
+
+/* ------------------------------------------------------------ blockquote */
+.docs-content blockquote {
+  margin: 18px 0;
+  padding: 13px 17px;
+  border-radius: 11px;
+  background: rgba(251, 191, 36, .09);
+  border: 1px solid rgba(251, 191, 36, .26);
+  border-left-width: 3px;
+  color: #fcd34d;
+}
+.docs-content blockquote p { margin: 0 0 8px; }
+.docs-content blockquote p:last-child { margin: 0; }
+.docs-content blockquote code {
+  background: rgba(0, 0, 0, .25);
+  color: #fde68a;
+}
+
+/* --------------------------------------------------------------- footer */
+.docs-foot {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 26px 46px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text-dim);
+  font-size: 12px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.docs-foot a { color: var(--text-muted); }
+
+/* --------------------------------------------------------- print / small */
+@media (max-width: 900px) {
+  .docs-layout { grid-template-columns: 1fr; gap: 22px; padding: 24px 18px 60px; }
+  .docs-toc {
+    position: static;
+    max-height: none;
+    padding: 15px 17px;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: var(--bg-elev);
+  }
+  .docs-content h1 { font-size: 25px; }
+  .docs-content h2 { font-size: 19px; margin-top: 36px; }
+}
+
+@media print {
+  body.docs-body { background: #fff; color: #111; }
+  .docs-topbar, .docs-toc, .docs-foot { display: none; }
+  .docs-content a { color: #111; text-decoration: underline; }
+  .docs-content pre, .docs-content code { background: #f4f4f5; color: #111; border-color: #ddd; }
+}
+
+</style>
+</head>
+<body class="docs-body">
+
+<header class="docs-topbar">
+  <span class="docs-brand"><span class="mark">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+         stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2.5 4.5 6v5.6c0 4.6 3.1 8.5 7.5 9.9 4.4-1.4 7.5-5.3 7.5-9.9V6L12 2.5Z"/>
+      <path d="M9.2 12.1 11.3 14l3.6-3.9"/>
+    </svg>
+  </span>Parental Gateway</span>
+  <nav class="docs-tabs"><a class="docs-tab" href="/docs/how-it-works">How it works</a>
+      <a class="docs-tab" href="/docs/deployment">Deployment</a>
+      <a class="docs-tab active" href="/docs/readme">Reference</a></nav>
+  <div class="spacer"></div>
+  
+</header>
+
+<div class="docs-layout">
+  <aside class="docs-toc">
+    <h4>On this page</h4>
+    <div class="toc">
+<ul>
+<li class="toc-l1"><a href="#parental-gateway">Parental Gateway</a><ul>
+<li class="toc-l2"><a href="#features">Features</a></li>
+<li class="toc-l2"><a href="#quick-start-docker">Quick start (Docker)</a></li>
+<li class="toc-l2"><a href="#reading-the-documentation">Reading the documentation</a></li>
+<li class="toc-l2"><a href="#configuration">Configuration</a></li>
+<li class="toc-l2"><a href="#first-run-setup-wizard">First-run setup wizard</a></li>
+<li class="toc-l2"><a href="#how-enforcement-works">How enforcement works</a><ul>
+<li class="toc-l3"><a href="#rule-precedence-per-device">Rule precedence (per device)</a></li>
+</ul>
+</li>
+<li class="toc-l2"><a href="#using-the-dashboard">Using the dashboard</a></li>
+<li class="toc-l2"><a href="#api">API</a></li>
+<li class="toc-l2"><a href="#project-layout">Project layout</a></li>
+<li class="toc-l2"><a href="#development">Development</a></li>
+<li class="toc-l2"><a href="#security-notes">Security notes</a></li>
+<li class="toc-l2"><a href="#troubleshooting">Troubleshooting</a></li>
+<li class="toc-l2"><a href="#licence">Licence</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+  </aside>
+  <article class="docs-content">
+<h1 id="parental-gateway">Parental Gateway</h1>
+<p>A self-hosted <strong>parental control &amp; network management</strong> appliance that runs in a<br />
+Linux container (Docker or LXC) and acts as your network <strong>gateway</strong>.</p>
+<p>It discovers every device on your LAN, lets you name and group them, and<br />
+enforces internet access rules <strong>by MAC address</strong> — with one-click group<br />
+blocking, pause timers and weekly bedtime schedules.</p>
+<pre><code>                    ┌──────────────────────────────────────────┐
+   Internet ◄───────┤  WAN (eth0)   Parental Gateway container │
+                    │   · NAT / IP forwarding                  │
+                    │   · iptables chain PCTRL (MAC filters)   │
+                    │   · Flask web UI  :8080                  │
+                    │   · SQLite persistence                   │
+                    └───────────────┬──────────────────────────┘
+                                    │ LAN (br0 / eth1)
+        ┌───────────────┬───────────┼────────────┬──────────────┐
+     Sam's Tablet     Kids PC    Smart TV     Console      Parent laptop
+     AA:BB:…:01       AA:BB:…:02 AA:BB:…:03   AA:BB:…:04   AA:BB:…:05
+        │                 │                        │
+        └── assigned to group &quot;Kids&quot; ── schedule 21:00 → 07:00 ── blocked
+</code></pre>
+<hr />
+<h2 id="features">Features</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What you get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Authentication</strong></td>
+<td>Username/password login, signed session cookies, CSRF protection, login throttling</td>
+</tr>
+<tr>
+<td><strong>Discovery</strong></td>
+<td>scapy ARP sweep of the subnet with <code>ip neigh</code> fallback, reverse-DNS + DHCP-lease hostnames</td>
+</tr>
+<tr>
+<td><strong>Device naming</strong></td>
+<td>Friendly names ("Sam's Tablet") stored against the MAC address</td>
+</tr>
+<tr>
+<td><strong>Groups / profiles</strong></td>
+<td>Colour-coded groups ("Kids", "Smart TVs", "Dad's Devices") with device assignment</td>
+</tr>
+<tr>
+<td><strong>Firewall</strong></td>
+<td>Dynamic <code>iptables</code> rules keyed on MAC, all inside one managed <code>PCTRL</code> chain</td>
+</tr>
+<tr>
+<td><strong>Group controls</strong></td>
+<td>Single-click <strong>Block all / Allow all</strong> for a whole group, or per device</td>
+</tr>
+<tr>
+<td><strong>Timers</strong></td>
+<td><strong>Pause internet</strong> for 15 min / 30 min / 1 h / 2 h / 4 h / overnight, plus an <em>Allow</em> override</td>
+</tr>
+<tr>
+<td><strong>Schedules</strong></td>
+<td>Recurring weekly windows (e.g. block <em>Kids</em> Mon–Fri 21:00 → 07:00) including midnight-crossing ranges</td>
+</tr>
+<tr>
+<td><strong>Gateway mode</strong></td>
+<td>IP forwarding + NAT (MASQUERADE) so the container actually routes client traffic</td>
+</tr>
+<tr>
+<td><strong>Observability</strong></td>
+<td>Live ruleset viewer, activity log, gateway/firewall status pills</td>
+</tr>
+<tr>
+<td><strong>Persistence</strong></td>
+<td>Everything in a single SQLite file in a bind-mounted volume</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="quick-start-docker">Quick start (Docker)</h2>
+<pre><code class="language-bash">git clone &lt;this repo&gt; parental-gateway &amp;&amp; cd parental-gateway
+
+cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
+docker compose up -d --build
+
+# open the UI
+xdg-open http://&lt;host-ip&gt;:8080
+</code></pre>
+<p><strong>On first run there is no account at all.</strong> The gateway detects an empty<br />
+install and serves a <strong>setup wizard</strong> that creates your administrator login and<br />
+confirms the network settings. No default password is ever shipped — see<br />
+<a href="#first-run-setup-wizard">First-run setup wizard</a>.</p>
+<blockquote>
+<p>The default profile uses <code>network_mode: host</code> with <code>cap_add: [NET_ADMIN, NET_RAW]</code>.<br />
+That is required: the container must see the real LAN interface to ARP-scan it<br />
+and to forward client traffic. See <code>docker-compose.yml</code> for a bridge-networked<br />
+variant if you only want to try the UI.</p>
+</blockquote>
+<p>Full walkthrough (including Proxmox LXC and making the container the default<br />
+gateway for your clients): <strong><a href="docs/DEPLOYMENT.md">docs/DEPLOYMENT.md</a></strong></p>
+<p>How it works internally — the policy engine, the firewall chain, discovery and<br />
+the request lifecycle: <strong><a href="docs/HOW_IT_WORKS.md">docs/HOW_IT_WORKS.md</a></strong></p>
+<hr />
+<h2 id="reading-the-documentation">Reading the documentation</h2>
+<p>Three ways in, whichever suits:</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>In the app</strong> → <code>/docs</code></td>
+<td>Rendered, styled, with a section sidebar. Reachable from the <strong>Docs</strong> button in the dashboard.</td>
+</tr>
+<tr>
+<td><strong>Offline files</strong> → <code>docs/*.html</code></td>
+<td>Self-contained HTML (CSS inlined) — double-click to open in a browser, or send to someone.</td>
+</tr>
+<tr>
+<td><strong>Source</strong> → <code>*.md</code></td>
+<td>Plain Markdown, readable on GitHub or in any editor.</td>
+</tr>
+</tbody>
+</table>
+<pre><code>http://&lt;host-ip&gt;:8080/docs                # live, from any device
+docs/HOW_IT_WORKS.html                    # standalone, works offline
+docs/DEPLOYMENT.html
+docs/README.html
+</code></pre>
+<p>The <code>/docs</code> routes are intentionally <strong>unauthenticated</strong>: they are the<br />
+project's own static documentation with no user data, and being able to read<br />
+the deployment guide <em>during</em> the setup wizard — before any account exists — is<br />
+the point. Only three whitelisted files are ever served; nothing else reaches<br />
+the filesystem.</p>
+<p>Regenerate the standalone HTML after editing a <code>.md</code> file:</p>
+<pre><code class="language-bash">python scripts/build_docs.py     # needs `pip install Markdown`
+</code></pre>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<p>All settings are environment variables (see <code>.env.example</code> for the full list).</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ADMIN_USERNAME</code></td>
+<td><code>admin</code></td>
+<td>Username pre-filled by the setup wizard</td>
+</tr>
+<tr>
+<td><code>ADMIN_PASSWORD</code></td>
+<td><em>(empty)</em></td>
+<td><strong>Empty = launch the setup wizard.</strong> Set it to auto-provision an account for unattended installs</td>
+</tr>
+<tr>
+<td><code>REQUIRE_SETUP_WIZARD</code></td>
+<td><code>0</code></td>
+<td>Force the wizard even when <code>ADMIN_PASSWORD</code> is set</td>
+</tr>
+<tr>
+<td><code>MIN_PASSWORD_LENGTH</code></td>
+<td><code>8</code></td>
+<td>Minimum password length enforced by the wizard</td>
+</tr>
+<tr>
+<td><code>SECRET_KEY</code></td>
+<td>auto-generated in <code>data/secret.key</code></td>
+<td>Cookie/session signing key</td>
+</tr>
+<tr>
+<td><code>SESSION_TTL_HOURS</code></td>
+<td><code>12</code></td>
+<td>Login session lifetime</td>
+</tr>
+<tr>
+<td><code>WEB_PORT</code></td>
+<td><code>8080</code></td>
+<td>Web UI port</td>
+</tr>
+<tr>
+<td><code>GATEWAY_MODE</code></td>
+<td><code>1</code></td>
+<td>Enable IP forwarding + NAT at boot</td>
+</tr>
+<tr>
+<td><code>LAN_IFACE</code></td>
+<td><code>eth0</code></td>
+<td>Interface facing your clients (overridden by the wizard)</td>
+</tr>
+<tr>
+<td><code>WAN_IFACE</code></td>
+<td><code>eth0</code></td>
+<td>Interface facing the internet (overridden by the wizard)</td>
+</tr>
+<tr>
+<td><code>LAN_SUBNET</code></td>
+<td>auto-detect</td>
+<td>Client subnet in CIDR form (overridden by the wizard)</td>
+</tr>
+<tr>
+<td><code>LAN_IP_CIDR</code></td>
+<td><em>(empty)</em></td>
+<td>Optional static address for <code>LAN_IFACE</code></td>
+</tr>
+<tr>
+<td><code>SCAN_INTERVAL_MINUTES</code></td>
+<td><code>10</code></td>
+<td>Background discovery interval (<code>0</code> = off)</td>
+</tr>
+<tr>
+<td><code>RECONCILE_INTERVAL_SECONDS</code></td>
+<td><code>20</code></td>
+<td>How often rules are recomputed</td>
+</tr>
+<tr>
+<td><code>ONLINE_WINDOW_MINUTES</code></td>
+<td><code>5</code></td>
+<td>"Online" threshold in the UI</td>
+</tr>
+<tr>
+<td><code>FIREWALL_MODE</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> / <code>force</code> / <code>off</code> (dry-run)</td>
+</tr>
+<tr>
+<td><code>FIREWALL_CHAIN</code></td>
+<td><code>PCTRL</code></td>
+<td>Name of the managed iptables chain</td>
+</tr>
+<tr>
+<td><code>LOG_LEVEL</code></td>
+<td><code>INFO</code></td>
+<td>Python logging level</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="first-run-setup-wizard">First-run setup wizard</h2>
+<p>A brand-new install has <strong>no user and no password</strong>. Until the wizard is<br />
+finished, every protected API returns <code>428</code> and all page requests redirect to<br />
+<code>/setup</code>.</p>
+<p>The wizard has four steps:</p>
+<ol>
+<li><strong>Welcome</strong> — pre-flight checks (gateway mode, detected subnet, firewall<br />
+   backend, interface count) and a warning that the account is unclaimed.</li>
+<li><strong>Account</strong> — username + password with confirmation and a strength meter.<br />
+   Minimum length is <code>MIN_PASSWORD_LENGTH</code> (8 by default).</li>
+<li><strong>Network</strong> — LAN interface, WAN interface and client subnet, pre-filled<br />
+   from live detection. These are stored in the database and take precedence<br />
+   over the environment variables.</li>
+<li><strong>Finish</strong> — summary, then straight into the dashboard signed in.</li>
+</ol>
+<pre><code>GET  /api/setup/status   # unauthenticated: wizard config + detection results
+POST /api/setup          # unauthenticated ONLY while zero users exist
+</code></pre>
+<p><code>POST /api/setup</code> returns <code>409</code> once an account exists, so the wizard can never<br />
+be used to hijack a configured install. Failed attempts are throttled with the<br />
+same per-IP counter as the login form.</p>
+<p>For automated deployments set <code>ADMIN_PASSWORD</code> and the wizard is skipped<br />
+entirely (the account is created at boot). Set <code>REQUIRE_SETUP_WIZARD=1</code> to<br />
+override that and force the interactive flow.</p>
+<hr />
+<h2 id="how-enforcement-works">How enforcement works</h2>
+<p>The application never rewrites your whole ruleset. It owns exactly <strong>one</strong><br />
+chain and jumps to it from the top of <code>FORWARD</code>:</p>
+<pre><code>*filter
+-A FORWARD -j PCTRL            # inserted once, at position 1
+-A PCTRL -m mac --mac-source AA:BB:CC:DD:EE:01 -j DROP
+-A PCTRL -m mac --mac-source AA:BB:CC:DD:EE:04 -j DROP
+-A PCTRL -j RETURN
+</code></pre>
+<p>On every reconcile the app computes the desired MAC list and rebuilds that<br />
+chain to match it exactly — so rules can never drift or duplicate.</p>
+<h3 id="rule-precedence-per-device">Rule precedence (per device)</h3>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Source</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100</td>
+<td>Manual <strong>Block</strong> (device toggle or its group's toggle)</td>
+<td>blocked</td>
+</tr>
+<tr>
+<td>80</td>
+<td><strong>Pause</strong> timer ("pause for 30 min")</td>
+<td>blocked</td>
+</tr>
+<tr>
+<td>60</td>
+<td><strong>Allow</strong> timer ("allow for 1 hour")</td>
+<td>allowed</td>
+</tr>
+<tr>
+<td>40</td>
+<td>Weekly <strong>schedule</strong> window</td>
+<td>blocked</td>
+</tr>
+<tr>
+<td>0</td>
+<td>Default</td>
+<td>allowed</td>
+</tr>
+</tbody>
+</table>
+<p>A manual block always wins, so a child can't undo a parental block with an<br />
+allow timer. The UI always shows <em>why</em> a device is blocked.</p>
+<hr />
+<h2 id="using-the-dashboard">Using the dashboard</h2>
+<ol>
+<li><strong>Scan</strong> — sweep the subnet; devices appear with IP, MAC and hostname.</li>
+<li><strong>Rename</strong> — give each device a friendly name (stored against the MAC).</li>
+<li><strong>Group</strong> — create "Kids", "Smart TVs", … and drop devices into them.</li>
+<li><strong>Block / Allow</strong> — the switch on every device row, or <strong>Block all</strong> on a group card.</li>
+<li><strong>Pause…</strong> — pick a duration; a countdown chip appears at the top of the page.</li>
+<li><strong>Schedules</strong> — e.g. group <em>Kids</em>, Mon–Fri, <code>21:00 → 07:00</code>.</li>
+<li><strong>Gateway &amp; firewall</strong> — inspect the live <code>filter</code> / <code>nat</code> rulesets and the activity log.</li>
+</ol>
+<hr />
+<h2 id="api">API</h2>
+<p>All endpoints are JSON and live under <code>/api</code>. Authentication uses the<br />
+<code>pg_session</code> cookie; mutations additionally require the <code>X-CSRF-Token</code> header<br />
+(issued by <code>POST /api/login</code> and <code>GET /api/session</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/setup/status</code></td>
+<td>Unauthenticated wizard config + network detection</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/setup</code></td>
+<td>Create the admin account (only while no user exists)</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/login</code></td>
+<td><code>{username, password}</code> → sets cookie, returns <code>{csrf}</code></td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/logout</code></td>
+<td>Invalidate the current session</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/session</code></td>
+<td>Session bootstrap for the UI</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/overview</code></td>
+<td>Everything the dashboard needs in one call</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/scan</code></td>
+<td>Trigger a subnet scan</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/devices</code></td>
+<td>List discovered devices</td>
+</tr>
+<tr>
+<td><code>PATCH</code></td>
+<td><code>/api/devices/{mac}</code></td>
+<td><code>{name, group_id, blocked}</code></td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/devices/{mac}/access</code></td>
+<td><code>{blocked}</code></td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/devices/{mac}/timer</code></td>
+<td><code>{minutes, kind: block\|allow, label}</code></td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/devices/{mac}</code></td>
+<td>Forget a device</td>
+</tr>
+<tr>
+<td><code>GET</code> <code>POST</code></td>
+<td><code>/api/groups</code></td>
+<td>List / create groups</td>
+</tr>
+<tr>
+<td><code>PATCH</code> <code>DELETE</code></td>
+<td><code>/api/groups/{id}</code></td>
+<td>Edit / delete a group</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/groups/{id}/access</code></td>
+<td><code>{blocked}</code> — block/allow the whole group</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/groups/{id}/timer</code></td>
+<td><code>{minutes, kind}</code></td>
+</tr>
+<tr>
+<td><code>GET</code> <code>POST</code></td>
+<td><code>/api/schedules</code></td>
+<td>List / create weekly schedules</td>
+</tr>
+<tr>
+<td><code>PATCH</code> <code>DELETE</code></td>
+<td><code>/api/schedules/{id}</code></td>
+<td>Edit / delete a schedule</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/pauses</code></td>
+<td>Active timers</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/pauses/{id}</code></td>
+<td>Cancel a timer</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/status</code></td>
+<td>Gateway + firewall + policy status</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/rules</code></td>
+<td>Live <code>iptables -S</code> output</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/reconcile</code></td>
+<td>Force a rules re-apply</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/nat</code></td>
+<td><code>{enabled}</code></td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/events</code></td>
+<td>Activity log</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/healthz</code></td>
+<td>Unauthenticated liveness probe</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="project-layout">Project layout</h2>
+<pre><code>parental-gateway/
+├── Dockerfile                 # slim Python image + iptables/iproute2/scapy tooling
+├── docker-compose.yml         # host networking + NET_ADMIN/NET_RAW
+├── entrypoint.sh              # ip_forward, NAT bootstrap, interface config
+├── requirements.txt
+├── .env.example
+├── app/
+│   ├── __init__.py            # Flask factory, bootstrap, waitress entry point
+│   ├── config.py              # env-driven configuration
+│   ├── db.py                  # SQLite schema + helpers
+│   ├── security.py            # users, session tokens, CSRF, throttling
+│   ├── models.py              # devices / groups / pauses / schedules
+│   ├── settings.py            # runtime settings (DB over env)
+│   ├── docs.py                # Markdown -&gt; HTML documentation renderer
+│   ├── scanner.py             # scapy ARP + `ip neigh` discovery
+│   ├── firewall.py            # iptables PCTRL chain management
+│   ├── gateway.py             # IP forwarding, NAT, interface state
+│   ├── engine.py              # policy evaluation &amp; reconciliation
+│   ├── scheduler.py           # background reconcile + scan loop
+│   ├── routes/                # web + JSON API blueprints
+│   ├── templates/             # setup.html, login.html, dashboard.html
+│   └── static/                # css/app.css, css/docs.css, js/app.js
+├── scripts/
+│   ├── smoke_test.py          # backend API + policy-engine test suite
+│   ├── dom_test.mjs           # dashboard render + interaction test suite
+│   ├── build_docs.py          # render standalone docs/*.html files
+│   └── setup-gateway.sh       # host-side helper (forwarding, routing, dnsmasq)
+└── docs/
+    ├── HOW_IT_WORKS.md        architecture &amp; design explainer
+    ├── DEPLOYMENT.md          step-by-step deployment guide
+    └── *.html                 standalone renders for offline reading
+</code></pre>
+<hr />
+<h2 id="development">Development</h2>
+<pre><code class="language-bash"># backend: API + policy-engine suite (no root, no iptables needed)
+python scripts/smoke_test.py
+
+# frontend: jsdom render + interaction suite
+npm install          # installs jsdom (dev only)
+node scripts/dom_test.mjs
+
+# or both
+npm test
+
+# run locally against a dummy firewall
+FIREWALL_MODE=off GATEWAY_MODE=0 DATA_DIR=./data python -m app
+</code></pre>
+<p><code>FIREWALL_MODE=off</code> puts the app in <strong>dry-run</strong>: the policy engine still<br />
+computes everything and the UI shows exactly which rules <em>would</em> be installed,<br />
+but the kernel is never touched. Useful for testing on a laptop.</p>
+<hr />
+<h2 id="security-notes">Security notes</h2>
+<ul>
+<li><strong>No default password exists.</strong> The install starts with zero accounts and the<br />
+  first-run wizard creates the administrator. Complete the wizard <em>before</em><br />
+  exposing the UI to your network — while it is pending, whoever reaches<br />
+<code>/setup</code> first claims the account.</li>
+<li>Use a long random <code>SECRET_KEY</code> in production so sessions survive container<br />
+  rebuilds; otherwise one is generated and persisted in <code>data/secret.key</code>.* Cookies are <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> when<br />
+<code>SESSION_COOKIE_SECURE=1</code> (set this if you terminate TLS in front).</li>
+<li>Mutating API calls require a per-session CSRF token.</li>
+<li>Logins are throttled per client IP (8 attempts / 5 minutes by default).</li>
+<li>The container needs <code>NET_ADMIN</code> to manage <code>iptables</code>. Do <strong>not</strong> add<br />
+<code>privileged: true</code> — it is not required.</li>
+<li>This tool controls <em>your own</em> network. Only deploy it on hardware you own or<br />
+  administer, and tell your family it exists.</li>
+</ul>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Firewall pill shows <strong>dry-run</strong></td>
+<td><code>iptables</code> is missing or the container lacks <code>NET_ADMIN</code>. Add <code>cap_add: [NET_ADMIN, NET_RAW]</code>.</td>
+</tr>
+<tr>
+<td>No devices found on Scan</td>
+<td>Host networking is required. Bridge networking cannot see your LAN.</td>
+</tr>
+<tr>
+<td>Rules computed but clients still online</td>
+<td>Clients must route <strong>through</strong> this container — set their DHCP gateway to the container IP (see deployment guide).</td>
+</tr>
+<tr>
+<td>"could not auto-detect LAN_SUBNET"</td>
+<td>Set <code>LAN_SUBNET=192.168.1.0/24</code> explicitly in <code>.env</code>.</td>
+</tr>
+<tr>
+<td>Sessions lost on restart</td>
+<td>Set <code>SECRET_KEY</code> in <code>.env</code>, or keep the <code>./data</code> volume.</td>
+</tr>
+<tr>
+<td>Schedules not firing</td>
+<td>Schedules use the container clock — set <code>TZ</code> correctly.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="licence">Licence</h2>
+<p>MIT — use it, modify it, ship it.</p>
+  </article>
+</div>
+
+<footer class="docs-foot">
+  <span>Parental Gateway documentation</span>
+  <a href="HOW_IT_WORKS.html">How It Works</a>
+  <a href="DEPLOYMENT.html">Deployment Guide</a>
+  <a href="README.html">README</a>
+</footer>
+
+</body>
+</html>

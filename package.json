@@ -1,0 +1,15 @@
+{
+  "name": "parental-gateway-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend test harness for the Parental Gateway dashboard (Python app lives in app/).",
+  "type": "module",
+  "scripts": {
+    "test:dom": "node scripts/dom_test.mjs",
+    "test:py": "python scripts/smoke_test.py",
+    "test": "npm run test:py && npm run test:dom"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.0"
+  }
+}
