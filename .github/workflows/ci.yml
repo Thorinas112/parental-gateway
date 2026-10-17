@@ -134,7 +134,7 @@ jobs:
 
       - name: Smoke test the built image
         run: |
-          docker run -d --name smoke \
+          docker run -d --name smoke -p 127.0.0.1:8080:8080 \
             -e GATEWAY_MODE=0 -e FIREWALL_MODE=off \
             -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=ci-smoke-password-123 \
             -e WEB_PORT=8080 -e DNS_ENABLED=0 -e USAGE_ENABLED=0 \
