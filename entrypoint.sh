@@ -51,10 +51,23 @@ detect_lan_subnet() {
     if ! command -v ip >/dev/null 2>&1; then
         return 0
     fi
-    local cidr
-    cidr="$(ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | head -n1 || true)"
-    if [ -n "$cidr" ]; then
-        LAN_SUBNET="$cidr"
+
+    # Prefer the kernel's own connected route - it gives the *network* address
+    # (192.168.1.0/24) rather than the interface address (192.168.1.156/24).
+    local network
+    network="$(ip -o -4 route show dev "$LAN_IFACE" proto kernel 2>/dev/null | awk '{print $1}' | head -n1 || true)"
+
+    # Fallback: normalise the interface address to its network.
+    if [ -z "$network" ]; then
+        local cidr
+        cidr="$(ip -o -4 addr show dev "$LAN_IFACE" 2>/dev/null | awk '{print $4}' | head -n1 || true)"
+        if [ -n "$cidr" ]; then
+            network="$(python3 -c 'import ipaddress,sys;print(ipaddress.ip_network(sys.argv[1],strict=False))' "$cidr" 2>/dev/null || echo "$cidr")"
+        fi
+    fi
+
+    if [ -n "$network" ]; then
+        LAN_SUBNET="$network"
         log "auto-detected LAN_SUBNET=$LAN_SUBNET on $LAN_IFACE"
     else
         warn "could not auto-detect LAN_SUBNET for $LAN_IFACE - NAT rules skipped"
