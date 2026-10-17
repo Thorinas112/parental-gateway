@@ -66,6 +66,15 @@ Multi-arch (`linux/amd64`, `linux/arm64`) images are published to GHCR on every
 release, so a Raspberry Pi deploys exactly the same way as a server. There is
 no build step.
 
+**One-liner** — installs the Docker Compose/buildx plugins if they are missing,
+adds you to the `docker` group, clones, configures and starts:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/scripts/setup-host.sh | bash -s -- --deploy
+```
+
+**Or by hand:**
+
 ```bash
 gh repo clone Thorinas112/parental-gateway        # or: git clone <repo-url>
 cd parental-gateway

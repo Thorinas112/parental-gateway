@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `scripts/setup-host.sh` — prepares a host for deployment: installs the Docker
+  Compose V2 and buildx plugins when the distribution's Docker package omitted
+  them (as Ubuntu's `docker.io` does), adds the current user to the `docker`
+  group, and optionally clones, configures and starts the gateway with
+  `--deploy`. Addresses the exact failures seen deploying to a fresh Ubuntu
+  box: `docker: unknown command: docker compose`, the legacy-builder
+  deprecation, and `permission denied` on `/var/run/docker.sock`.
 
 ## [1.0.1] - 2026-10-17
 
