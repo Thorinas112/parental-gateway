@@ -449,6 +449,10 @@ blocking, pause timers and weekly bedtime schedules.</p>
 <td>Single-click <strong>Block all / Allow all</strong> for a whole group, or per device</td>
 </tr>
 <tr>
+<td><strong>Master pause</strong></td>
+<td>One button to cut off <strong>every</strong> device — 15 min / 30 min / 1 h / 2 h, or until resumed</td>
+</tr>
+<tr>
 <td><strong>Timers</strong></td>
 <td><strong>Pause internet</strong> for 15 min / 30 min / 1 h / 2 h / 4 h / overnight, plus an <em>Allow</em> override</td>
 </tr>
@@ -457,12 +461,28 @@ blocking, pause timers and weekly bedtime schedules.</p>
 <td>Recurring weekly windows (e.g. block <em>Kids</em> Mon–Fri 21:00 → 07:00) including midnight-crossing ranges</td>
 </tr>
 <tr>
+<td><strong>Website filtering</strong></td>
+<td>Per-group domain block/allow rules, a DNS proxy that answers NXDOMAIN, and a bypass-proof port-53 intercept</td>
+</tr>
+<tr>
+<td><strong>Traffic usage</strong></td>
+<td>Per-device and per-group bandwidth graphs with hourly/daily rollups kept long term</td>
+</tr>
+<tr>
+<td><strong>Unknown device quarantine</strong></td>
+<td>Any new MAC can be held offline until you approve it</td>
+</tr>
+<tr>
 <td><strong>Gateway mode</strong></td>
 <td>IP forwarding + NAT (MASQUERADE) so the container actually routes client traffic</td>
 </tr>
 <tr>
 <td><strong>Observability</strong></td>
-<td>Live ruleset viewer, activity log, gateway/firewall status pills</td>
+<td>Live ruleset viewer, DNS query log, activity log, gateway/firewall status pills</td>
+</tr>
+<tr>
+<td><strong>Documentation</strong></td>
+<td>Rendered in-app at <code>/docs</code>, plus standalone offline HTML</td>
 </tr>
 <tr>
 <td><strong>Persistence</strong></td>
@@ -836,6 +856,66 @@ allow timer. The UI always shows <em>why</em> a device is blocked.</p>
 <td><code>DELETE</code></td>
 <td><code>/api/pauses/{id}</code></td>
 <td>Cancel a timer</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/pause-all</code></td>
+<td>Pause <strong>every</strong> device — <code>{minutes}</code> or omit for "until resumed"</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/resume-all</code></td>
+<td>Undo the master pause</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/devices/{mac}/approve</code></td>
+<td>Approve/unapprove a quarantined device</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/devices/unapproved</code></td>
+<td>Devices waiting for approval</td>
+</tr>
+<tr>
+<td><code>GET</code> <code>POST</code></td>
+<td><code>/api/web-rules</code></td>
+<td>List / create domain filter rules</td>
+</tr>
+<tr>
+<td><code>PATCH</code> <code>DELETE</code></td>
+<td><code>/api/web-rules/{id}</code></td>
+<td>Enable / disable / delete a rule</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/dns/status</code></td>
+<td>Proxy state, rule counts, interception status</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/dns/start</code> <code>/api/dns/stop</code></td>
+<td>Control the DNS proxy</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/dns/queries</code></td>
+<td>Blocked/allowed query log (<code>?action=</code>, <code>?q=</code>, <code>?mac=</code>)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/usage</code></td>
+<td>Traffic graphs (<code>?range=1h\|24h\|7d\|30d\|90d</code>)</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/usage/sample</code> <code>/api/usage/reset</code></td>
+<td>Sample now / clear history</td>
+</tr>
+<tr>
+<td><code>GET</code> <code>PATCH</code></td>
+<td><code>/api/settings</code></td>
+<td><code>auto_block_unknown</code>, <code>dns_filtering</code></td>
 </tr>
 <tr>
 <td><code>GET</code></td>

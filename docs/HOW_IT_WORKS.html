@@ -391,6 +391,8 @@ body.docs-body {
 <li class="toc-l3"><a href="#why-mac-filtering-and-not-ip-filtering">Why MAC filtering and not IP filtering?</a></li>
 </ul>
 </li>
+<li class="toc-l2"><a href="#10b-filtering-websites">10b. Filtering websites</a></li>
+<li class="toc-l2"><a href="#10c-measuring-traffic">10c. Measuring traffic</a></li>
 <li class="toc-l2"><a href="#11-gateway-mode-forwarding-and-nat">11. Gateway mode: forwarding and NAT</a></li>
 <li class="toc-l2"><a href="#12-the-background-loop">12. The background loop</a></li>
 <li class="toc-l2"><a href="#13-end-to-end-pressing-block">13. End to end: pressing "Block"</a></li>
@@ -707,8 +709,13 @@ one question per device: <strong>should this MAC be dropped right now, and why?<
 <td>🔴 blocked</td>
 </tr>
 <tr>
+<td style="text-align: right;"><strong>90</strong></td>
+<td><strong>Unapproved device</strong> — a new MAC held in quarantine</td>
+<td>🔴 blocked</td>
+</tr>
+<tr>
 <td style="text-align: right;"><strong>80</strong></td>
-<td><strong>Pause</strong> timer — "pause internet for 30 min"</td>
+<td><strong>Pause</strong> timer — "pause internet for 30 min", including the master <strong>Pause all</strong></td>
 <td>🔴 blocked</td>
 </tr>
 <tr>
@@ -771,6 +778,71 @@ the test suite runs, and how you can evaluate the UI on a laptop.</p>
 rule to the physical device. It's not unforgeable (a determined user can clone<br />
 a MAC), but for family use it's the right trade-off, and it keeps rules<br />
 survivable across DHCP renewals.</p>
+<hr />
+<h2 id="10b-filtering-websites">10b. Filtering websites</h2>
+<p>Blocking a device is blunt. Website filtering is finer-grained: the same device<br />
+stays online, but particular domains stop resolving.</p>
+<p><strong>Where the decision happens.</strong> A DNS proxy listens on port 53. Every query<br />
+gets checked against the rule table and, if it matches a block rule, answered<br />
+with <code>NXDOMAIN</code> — the client sees "this domain does not exist" and the browser<br />
+shows its usual error page.</p>
+<p><strong>Why it can't be bypassed.</strong> A filter that clients can dodge by pointing at<br />
+<code>8.8.8.8</code> is decoration. An <code>iptables</code> NAT rule in <code>PREROUTING</code> redirects<br />
+<em>every</em> packet arriving from the LAN on port 53 — UDP and TCP, any destination<br />
+— to the gateway's own resolver.</p>
+<pre><code>-A PREROUTING -i eth1 -p udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p tcp --dport 53 -j REDIRECT --to-ports 53
+</code></pre>
+<p><strong>Rule semantics.</strong> A pattern covers the domain and all its subdomains;<br />
+<code>*.example.com</code> covers subdomains only. The <strong>most specific</strong> matching rule<br />
+wins, and ties go to <strong>allow</strong> — so <code>youtube.com</code> can be blocked while<br />
+<code>kids.youtube.com</code> stays reachable. Rules scoped to a group apply only to that<br />
+group's devices; rules scoped to <em>Everyone</em> apply to all.</p>
+<p><strong>What it does not do.</strong> It filters DNS, not content. Encrypted-DNS (DoH/DoT)<br />
+and VPNs bypass it, and it can't see paths inside a permitted domain. For a<br />
+family network that is usually the right trade-off, but it is a filter, not a<br />
+guarantee.</p>
+<hr />
+<h2 id="10c-measuring-traffic">10c. Measuring traffic</h2>
+<p>Every <code>iptables</code> rule carries a byte counter. A second chain, <code>PCTRL-STAT</code>,<br />
+holds one rule per device:</p>
+<pre><code>-A PCTRL-STAT -m mac --mac-source AA:BB:CC:DD:EE:01 -j RETURN   &lt;- upload
+-A PCTRL-STAT -d 192.168.1.10/32 -j RETURN                      &lt;- download
+</code></pre>
+<p>Upload is matched by MAC; download arrives addressed to the <em>gateway</em>, so it<br />
+is matched by the device's IP instead. The chain is deliberately <strong>never<br />
+flushed</strong> — rules are added and removed individually as devices come and go —<br />
+so the counters keep running.</p>
+<p>Every <code>USAGE_INTERVAL_SECONDS</code> the counters are read and the <em>delta</em> since the<br />
+last sample is stored. Data is rolled up as it goes:</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Keeps</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usage_samples</code></td>
+<td>48 h</td>
+<td>fine-grained graphs</td>
+</tr>
+<tr>
+<td><code>usage_hourly</code></td>
+<td>90 days</td>
+<td>7-day / 30-day views</td>
+</tr>
+<tr>
+<td><code>usage_daily</code></td>
+<td>indefinitely</td>
+<td>long-term history</td>
+</tr>
+</tbody>
+</table>
+<p>Because each sample is added to both rollups incrementally, querying a year of<br />
+history touches a few hundred rows, not millions.</p>
 <hr />
 <h2 id="11-gateway-mode-forwarding-and-nat">11. Gateway mode: forwarding and NAT</h2>
 <p>Filtering alone isn't enough — the traffic has to actually flow <em>through</em> the<br />
@@ -922,11 +994,14 @@ tell your family it exists.</p>
 │   ├── settings.py          runtime settings (DB over env)
 │   ├── security.py          users, sessions, CSRF, throttling
 │   ├── models.py            devices / groups / pauses / schedules
-│   ├── scanner.py           ARP discovery            ─┐
-│   ├── engine.py            policy evaluation         │ control plane
-│   ├── firewall.py          PCTRL chain management    │
-│   ├── gateway.py           forwarding + NAT         ─┘
-│   ├── scheduler.py         background reconcile + scan
+│   ├── docs.py              Markdown -&gt; HTML renderer
+│   ├── dnsfilter.py         domain matching + DNS proxy   ─┐
+│   ├── scanner.py           ARP discovery                  │
+│   ├── usage.py             byte counters -&gt; aggregates    │ control plane
+│   ├── engine.py            policy evaluation               │
+│   ├── firewall.py          PCTRL chain management          │
+│   ├── gateway.py           forwarding + NAT               ─┘
+│   ├── scheduler.py         background reconcile + scan + sample
 │   ├── routes/
 │   │   ├── web.py           HTML pages
 │   │   └── api.py           JSON API
@@ -964,8 +1039,16 @@ tell your family it exists.</p>
 <td><code>scanner.py</code></td>
 </tr>
 <tr>
+<td>Change how websites are matched/blocked</td>
+<td><code>dnsfilter.py</code> (pure logic, no I/O)</td>
+</tr>
+<tr>
 <td>Add a dashboard panel</td>
 <td><code>templates/dashboard.html</code> + <code>static/js/app.js</code></td>
+</tr>
+<tr>
+<td>Change or add a chart</td>
+<td><code>static/js/chart.js</code></td>
 </tr>
 <tr>
 <td>Add an API endpoint</td>
@@ -985,7 +1068,7 @@ tell your family it exists.</p>
 </tr>
 <tr>
 <td>Alter the schema</td>
-<td><code>db.py</code> (add the <code>CREATE TABLE</code> and bump nothing — <code>IF NOT EXISTS</code> handles fresh installs)</td>
+<td><code>db.py</code> (add the <code>CREATE TABLE</code>; <code>_migrate()</code> handles existing databases)</td>
 </tr>
 </tbody>
 </table>

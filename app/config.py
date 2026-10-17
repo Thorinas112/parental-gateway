@@ -103,6 +103,25 @@ class Config:
     # auto | force | off
     FIREWALL_MODE = (os.environ.get("FIREWALL_MODE") or "auto").strip().lower()
     FIREWALL_CHAIN = (os.environ.get("FIREWALL_CHAIN") or "PCTRL").strip() or "PCTRL"
+    FIREWALL_STAT_CHAIN = (os.environ.get("FIREWALL_STAT_CHAIN") or "PCTRL-STAT").strip() or "PCTRL-STAT"
+
+    # --- traffic accounting ----------------------------------------------
+    # How often kernel byte counters are sampled into the database.
+    USAGE_INTERVAL_SECONDS = max(10, _int(os.environ.get("USAGE_INTERVAL_SECONDS"), 60))
+    # How long raw samples are kept before being rolled up and pruned.
+    USAGE_RETENTION_HOURS = _int(os.environ.get("USAGE_RETENTION_HOURS"), 48)
+    USAGE_HOURLY_RETENTION_DAYS = _int(os.environ.get("USAGE_HOURLY_RETENTION_DAYS"), 90)
+    USAGE_ENABLED = _bool(os.environ.get("USAGE_ENABLED"), True)
+
+    # --- DNS filtering ----------------------------------------------------
+    DNS_ENABLED = _bool(os.environ.get("DNS_ENABLED"), True)
+    DNS_PORT = _int(os.environ.get("DNS_PORT"), 53)
+    DNS_TIMEOUT = float(os.environ.get("DNS_TIMEOUT") or 3.0)
+    DNS_UPSTREAMS = tuple(
+        s.strip()
+        for s in (os.environ.get("DNS_UPSTREAMS") or "1.1.1.1,8.8.8.8,9.9.9.9").split(",")
+        if s.strip()
+    )
 
     LOG_LEVEL = (os.environ.get("LOG_LEVEL") or "INFO").strip().upper()
 

@@ -26,14 +26,17 @@ _started = False
 def _loop() -> None:
     reconcile_every = max(5, Config.RECONCILE_INTERVAL_SECONDS)
     scan_every = max(0, Config.SCAN_INTERVAL_MINUTES) * 60
+    usage_every = max(10, Config.USAGE_INTERVAL_SECONDS) if Config.USAGE_ENABLED else 0
 
     next_reconcile = 0.0
     next_scan = time.time() + 30.0 if scan_every else float("inf")
+    next_usage = time.time() + 5.0 if usage_every else float("inf")
 
     log.info(
-        "scheduler started (reconcile every %ss, scan every %ss)",
+        "scheduler started (reconcile every %ss, scan every %ss, usage every %ss)",
         reconcile_every,
         scan_every or "disabled",
+        usage_every or "disabled",
     )
 
     while not _stop.is_set():
@@ -54,6 +57,15 @@ def _loop() -> None:
                 scan_network()
             except Exception:  # noqa: BLE001
                 log.exception("background scan failed")
+
+        if now >= next_usage:
+            next_usage = now + usage_every
+            try:
+                from . import usage
+
+                usage.sample()
+            except Exception:  # noqa: BLE001
+                log.exception("usage sampling failed")
 
         _stop.wait(1.0)
 

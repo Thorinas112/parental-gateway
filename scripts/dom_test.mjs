@@ -24,7 +24,7 @@ const OVERVIEW = {
       mac: 'AA:BB:CC:DD:EE:01', ip: '192.168.1.10', hostname: 'tablet',
       custom_name: "Sam's Tablet", name: "Sam's Tablet",
       group_id: 1, group_name: 'Kids', group_color: '#f87171',
-      blocked: false, group_blocked: false,
+      blocked: false, group_blocked: false, approved: true,
       effective_blocked: true, reason: 'Schedule “Bedtime” (21:00–07:00)',
       online: true, first_seen: NOW - 500, last_seen: NOW - 20,
     },
@@ -32,7 +32,7 @@ const OVERVIEW = {
       mac: 'AA:BB:CC:DD:EE:02', ip: '192.168.1.11', hostname: 'living-room-tv',
       custom_name: null, name: 'living-room-tv',
       group_id: 2, group_name: 'Smart TVs', group_color: '#22d3ee',
-      blocked: false, group_blocked: false,
+      blocked: false, group_blocked: false, approved: true,
       effective_blocked: false, reason: null,
       online: false, first_seen: NOW - 900, last_seen: NOW - 800,
     },
@@ -40,8 +40,8 @@ const OVERVIEW = {
       mac: 'AA:BB:CC:DD:EE:03', ip: '192.168.1.12', hostname: null,
       custom_name: null, name: 'AA:BB:CC:DD:EE:03',
       group_id: null, group_name: null, group_color: null,
-      blocked: true, group_blocked: false,
-      effective_blocked: true, reason: 'Blocked manually',
+      blocked: true, group_blocked: false, approved: false,
+      effective_blocked: true, reason: 'New device - waiting for approval',
       online: true, first_seen: NOW - 100, last_seen: NOW - 5,
     },
   ],
@@ -115,11 +115,78 @@ function router(url, init = {}) {
   if (path === '/api/session') {
     return jsonResponse({ authenticated: true, user: { id: 1, username: 'admin' }, csrf: 'test-csrf', expires_at: NOW + 3600 });
   }
-  if (path === '/api/overview') return jsonResponse(OVERVIEW);
+  if (path === '/api/overview') {
+    const overview = structuredClone(OVERVIEW);
+    if (state.masterPaused) {
+      overview.pauses = overview.pauses.concat([{
+        id: 99, target_type: 'all', target_id: '*', kind: 'block',
+        label: 'Paused (all devices)', created_at: NOW, expires_at: NOW + 3600,
+        remaining_seconds: 3600, remaining_human: '1h', indefinite: false,
+      }]);
+    }
+    return jsonResponse(overview);
+  }
   if (path === '/api/rules') return jsonResponse(RULES);
   if (path === '/api/logout') return jsonResponse({ ok: true });
+
+  if (path === '/api/pause-all') { state.masterPaused = true; return jsonResponse({ ok: true, paused: true }); }
+  if (path === '/api/resume-all') { state.masterPaused = false; return jsonResponse({ ok: true, paused: false }); }
+
+  if (path === '/api/web-rules') {
+    return jsonResponse({ rules: state.rules });
+  }
+  if (path === '/api/dns/status') {
+    return jsonResponse({
+      running: state.dnsRunning, port: 53, listen_port: 53, interceptable: true,
+      bound_to: ['0.0.0.0', 53],
+      upstreams: ['1.1.1.1', '8.8.8.8'],
+      stats: { queries: 412, blocked: 37, allowed: 375, errors: 0, started_at: NOW - 3600 },
+      interception: state.dnsRunning, lan_iface: 'eth1',
+      rule_count: state.rules.length, block_rules: 2, allow_rules: 1, dry_run: false,
+    });
+  }
+  if (path.startsWith('/api/dns/queries')) {
+    return jsonResponse({
+      queries: [
+        { ts: NOW - 30, mac: 'AA:BB:CC:DD:EE:01', ip: '192.168.1.10', domain: 'doubleclick.net', action: 'blocked', reason: 'blocked by doubleclick.net', device_name: "Sam's Tablet" },
+        { ts: NOW - 90, mac: 'AA:BB:CC:DD:EE:02', ip: '192.168.1.11', domain: 'bbc.co.uk', action: 'allowed', reason: 'no matching rule', device_name: 'living-room-tv' },
+      ],
+      stats: { total: 412, blocked: 37, allowed: 375, top_blocked: [{ domain: 'doubleclick.net', n: 21 }] },
+    });
+  }
+  if (path === '/api/settings') {
+    return jsonResponse({ auto_block_unknown: state.autoBlock, dns_filtering: state.dnsRunning, min_password_length: 8, usage_enabled: true });
+  }
+  if (path.startsWith('/api/usage')) {
+    return jsonResponse({
+      range: '24h', label: 'Last 24 hours', granularity: 'raw', since: NOW - 86400, now: NOW,
+      timeline: [{ ts: NOW - 3600, up: 1200, down: 8400, total: 9600 }, { ts: NOW - 1800, up: 400, down: 2100, total: 2500 }],
+      devices: [
+        { mac: 'AA:BB:CC:DD:EE:01', name: "Sam's Tablet", up: 800, down: 6400, total: 7200, percent: 60, group_color: '#f87171' },
+        { mac: 'AA:BB:CC:DD:EE:02', name: 'living-room-tv', up: 600, down: 4100, total: 4700, percent: 40, group_color: '#22d3ee' },
+      ],
+      groups: [
+        { group_id: 1, name: 'Kids', color: '#f87171', up: 800, down: 6400, total: 7200, percent: 60, device_count: 1 },
+        { group_id: 2, name: 'Smart TVs', color: '#22d3ee', up: 600, down: 4100, total: 4700, percent: 40, device_count: 1 },
+      ],
+      totals: { up: 1400, down: 10500, total: 11900 },
+      row_count: 2, sampling_interval: 60, retention_hours: 48,
+    });
+  }
+
   return jsonResponse({ ok: true, device: OVERVIEW.devices[0], pauses: OVERVIEW.pauses });
 }
+
+const state = {
+  rules: [
+    { id: 11, group_id: 0, group_name: null, pattern: 'doubleclick.net', action: 'block', enabled: true, source: 'custom' },
+    { id: 12, group_id: 1, group_name: 'Kids', pattern: 'youtube.com', action: 'block', enabled: true, source: 'custom' },
+    { id: 13, group_id: 0, group_name: null, pattern: 'school.example.org', action: 'allow', enabled: false, source: 'custom' },
+  ],
+  dnsRunning: true,
+  autoBlock: false,
+  masterPaused: false,
+};
 
 /* ------------------------------------------------------------------ test */
 let PASS = 0;
@@ -137,6 +204,8 @@ const html = readFileSync(TPL, 'utf8')
     (_m, byUrlFor, byAsset) => '/static/' + (byUrlFor || byAsset))
   // NOTE: use a replacer *function* - a string replacement would interpret
   // `$$`, `$&` etc. inside the JavaScript source as substitution patterns.
+  .replace('<script src="/static/js/chart.js"></script>',
+    () => `<script>\n${readFileSync(join(ROOT, 'app', 'static', 'js', 'chart.js'), 'utf8')}\n</script>`)
   .replace('<script src="/static/js/app.js"></script>', () => `<script>\n${readFileSync(JS, 'utf8')}\n</script>`);
 
 const virtualConsole = new VirtualConsole();
@@ -266,6 +335,97 @@ check('every mutation carries X-CSRF-Token',
   JSON.stringify(mutating.map((c) => [c.method, c.url, c.headers['X-CSRF-Token']])));
 
 /* ============================================================ setup wizard */
+/* ============================================== web filtering + controls */
+console.log('\n-- web filtering & controls --');
+await new Promise((r) => setTimeout(r, 250));
+
+check('filter panel present', document.getElementById('filter-panel') !== null);
+check('dns pill shows running', /DNS filtering on/.test(document.getElementById('dns-pill').textContent));
+check('rule rows rendered', document.querySelectorAll('#rule-body tr').length === 3,
+  String(document.querySelectorAll('#rule-body tr').length));
+check('query log rendered', document.querySelectorAll('#dns-query-log .query-row').length === 2);
+check('blocked query styled', document.querySelectorAll('#dns-query-log .query-row.blocked').length === 1);
+check('filter stats rendered', document.querySelectorAll('#filter-stats .usage-stat').length === 5);
+check('rule group options populated', document.querySelectorAll('#rule-group option').length === 3,
+  String(document.querySelectorAll('#rule-group option').length));
+
+document.getElementById('rule-pattern').value = 'tiktok.com';
+document.getElementById('rule-action').value = 'block';
+document.getElementById('rule-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+await new Promise((r) => setTimeout(r, 100));
+check('rule POSTed',
+  calls.some((c) => c.url === '/api/web-rules' && c.method === 'POST' &&
+    c.body.pattern === 'tiktok.com' && c.body.action === 'block'),
+  JSON.stringify(calls.filter((c) => c.url === '/api/web-rules')));
+
+document.querySelector('[data-rule-toggle]').click();
+await new Promise((r) => setTimeout(r, 80));
+check('rule PATCHed', calls.some((c) => c.url === '/api/web-rules/11' && c.method === 'PATCH' && c.body.enabled === false));
+
+document.querySelector('[data-rule-delete]').click();
+check('delete asks for confirmation', document.getElementById('modal').hidden === false);
+document.getElementById('confirm-yes').click();
+await new Promise((r) => setTimeout(r, 80));
+check('rule DELETEd', calls.some((c) => c.url === '/api/web-rules/11' && c.method === 'DELETE'));
+
+console.log('\n-- master pause --');
+document.getElementById('btn-pause-all').click();
+check('pause modal opens', document.getElementById('modal').hidden === false);
+check('pause modal offers choices', document.querySelectorAll('#modal-body [data-master-minutes]').length === 5,
+  String(document.querySelectorAll('#modal-body [data-master-minutes]').length));
+check('indefinite option offered', document.querySelector('[data-master-minutes="indefinite"]') !== null);
+document.querySelector('[data-master-minutes="30"]').click();
+await new Promise((r) => setTimeout(r, 150));
+check('pause-all POSTed', calls.some((c) => c.url === '/api/pause-all' && c.body && c.body.minutes === 30),
+  JSON.stringify(calls.filter((c) => c.url === '/api/pause-all')));
+check('button flips to Resume', /Resume all/.test(document.getElementById('btn-pause-all').textContent),
+  document.getElementById('btn-pause-all').textContent);
+
+document.getElementById('btn-pause-all').click();
+await new Promise((r) => setTimeout(r, 150));
+check('resume-all POSTed', calls.some((c) => c.url === '/api/resume-all'));
+check('button flips back', /Pause all/.test(document.getElementById('btn-pause-all').textContent));
+
+console.log('\n-- settings --');
+const autoblock = document.getElementById('set-autoblock');
+check('autoblock switch starts off', autoblock.checked === false);
+autoblock.checked = true;
+autoblock.dispatchEvent(new window.Event('change', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 100));
+check('autoblock PATCHed',
+  calls.some((c) => c.url === '/api/settings' && c.body && c.body.auto_block_unknown === true));
+
+const dnsSwitch = document.getElementById('set-dns');
+check('dns switch reflects status', dnsSwitch.checked === true, String(dnsSwitch.checked));
+dnsSwitch.checked = false;
+dnsSwitch.dispatchEvent(new window.Event('change', { bubbles: true }));
+await new Promise((r) => setTimeout(r, 100));
+check('dns toggle PATCHed',
+  calls.some((c) => c.url === '/api/settings' && c.body && c.body.dns_filtering === false));
+
+console.log('\n-- device approval --');
+check('approve button for unapproved device',
+  document.querySelector('[data-approve-device="AA:BB:CC:DD:EE:03"]') !== null);
+check('no approve button once approved',
+  document.querySelector('[data-approve-device="AA:BB:CC:DD:EE:01"]') === null);
+document.querySelector('[data-approve-device="AA:BB:CC:DD:EE:03"]').click();
+await new Promise((r) => setTimeout(r, 100));
+check('approve POSTed',
+  calls.some((c) => c.url === '/api/devices/AA:BB:CC:DD:EE:03/approve' && c.body.approved === true));
+
+console.log('\n-- usage charts --');
+check('usage panel present', document.getElementById('usage-panel') !== null);
+check('usage summary rendered', document.querySelectorAll('#usage-summary .usage-stat').length === 5,
+  String(document.querySelectorAll('#usage-summary .usage-stat').length));
+check('usage device bars rendered', document.querySelectorAll('#usage-devices .usage-row').length === 2);
+check('usage group bars rendered', document.querySelectorAll('#usage-groups .usage-row').length === 2);
+check('svg chart rendered', document.querySelector('#usage-chart .pg-svg') !== null);
+check('chart legend rendered', document.querySelectorAll('#usage-chart .pg-key').length === 2);
+check('totals shown', /Total traffic/.test(document.getElementById('usage-summary').textContent) &&
+  /Download/.test(document.getElementById('usage-summary').textContent) &&
+  /11\.6 KB/.test(document.getElementById('usage-summary').textContent),
+  document.getElementById('usage-summary').textContent.slice(0, 120));
+
 console.log('\n-- setup wizard --');
 {
   const setupCalls = [];

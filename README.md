@@ -35,10 +35,15 @@ blocking, pause timers and weekly bedtime schedules.
 | **Groups / profiles** | Colour-coded groups ("Kids", "Smart TVs", "Dad's Devices") with device assignment |
 | **Firewall** | Dynamic `iptables` rules keyed on MAC, all inside one managed `PCTRL` chain |
 | **Group controls** | Single-click **Block all / Allow all** for a whole group, or per device |
+| **Master pause** | One button to cut off **every** device — 15 min / 30 min / 1 h / 2 h, or until resumed |
 | **Timers** | **Pause internet** for 15 min / 30 min / 1 h / 2 h / 4 h / overnight, plus an *Allow* override |
 | **Schedules** | Recurring weekly windows (e.g. block *Kids* Mon–Fri 21:00 → 07:00) including midnight-crossing ranges |
+| **Website filtering** | Per-group domain block/allow rules, a DNS proxy that answers NXDOMAIN, and a bypass-proof port-53 intercept |
+| **Traffic usage** | Per-device and per-group bandwidth graphs with hourly/daily rollups kept long term |
+| **Unknown device quarantine** | Any new MAC can be held offline until you approve it |
 | **Gateway mode** | IP forwarding + NAT (MASQUERADE) so the container actually routes client traffic |
-| **Observability** | Live ruleset viewer, activity log, gateway/firewall status pills |
+| **Observability** | Live ruleset viewer, DNS query log, activity log, gateway/firewall status pills |
+| **Documentation** | Rendered in-app at `/docs`, plus standalone offline HTML |
 | **Persistence** | Everything in a single SQLite file in a bind-mounted volume |
 
 ---
@@ -234,6 +239,18 @@ All endpoints are JSON and live under `/api`. Authentication uses the
 | `PATCH` `DELETE` | `/api/schedules/{id}` | Edit / delete a schedule |
 | `GET` | `/api/pauses` | Active timers |
 | `DELETE` | `/api/pauses/{id}` | Cancel a timer |
+| `POST` | `/api/pause-all` | Pause **every** device — `{minutes}` or omit for "until resumed" |
+| `POST` | `/api/resume-all` | Undo the master pause |
+| `POST` | `/api/devices/{mac}/approve` | Approve/unapprove a quarantined device |
+| `GET` | `/api/devices/unapproved` | Devices waiting for approval |
+| `GET` `POST` | `/api/web-rules` | List / create domain filter rules |
+| `PATCH` `DELETE` | `/api/web-rules/{id}` | Enable / disable / delete a rule |
+| `GET` | `/api/dns/status` | Proxy state, rule counts, interception status |
+| `POST` | `/api/dns/start` `/api/dns/stop` | Control the DNS proxy |
+| `GET` | `/api/dns/queries` | Blocked/allowed query log (`?action=`, `?q=`, `?mac=`) |
+| `GET` | `/api/usage` | Traffic graphs (`?range=1h\|24h\|7d\|30d\|90d`) |
+| `POST` | `/api/usage/sample` `/api/usage/reset` | Sample now / clear history |
+| `GET` `PATCH` | `/api/settings` | `auto_block_unknown`, `dns_filtering` |
 | `GET` | `/api/status` | Gateway + firewall + policy status |
 | `GET` | `/api/rules` | Live `iptables -S` output |
 | `POST` | `/api/system/reconcile` | Force a rules re-apply |

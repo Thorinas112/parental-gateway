@@ -15,6 +15,7 @@ Three operating modes (``FIREWALL_MODE``):
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import threading
 from typing import Any, Iterable
@@ -25,7 +26,9 @@ from .utils import norm_mac, run_command
 log = logging.getLogger("pg.firewall")
 
 IPT = "iptables"
+IPT_SAVE = "iptables-save"
 CHAIN = Config.FIREWALL_CHAIN
+STAT_CHAIN = Config.FIREWALL_STAT_CHAIN
 
 _lock = threading.RLock()
 _state: dict[str, Any] = {
@@ -206,6 +209,7 @@ def status() -> dict[str, Any]:
     return {
         "binary": IPT,
         "chain": CHAIN,
+        "stat_chain": STAT_CHAIN,
         "available": iptables_available(),
         "dry_run": dry_run(),
         "mode": Config.FIREWALL_MODE,
@@ -214,3 +218,195 @@ def status() -> dict[str, Any]:
         "last_error": _state.get("last_error"),
         "last_applied": _state.get("last_applied", []),
     }
+
+
+# ==========================================================================
+# Accounting chain (traffic byte counters)
+#
+# A separate chain from PCTRL so that enforcement can be rebuilt freely while
+# the counters keep accumulating. It is NEVER flushed - rules are only added
+# or removed individually as devices come and go.
+#
+#   -A PCTRL-STAT -m mac --mac-source AA:BB:CC:DD:EE:01 -j RETURN   (upload)
+#   -A PCTRL-STAT -d 192.168.1.10/32 -j RETURN                       (download)
+#
+# Upload is matched on the device's MAC; download arrives addressed to the
+# *gateway*, so it has to be matched on the device's IP instead.
+# ==========================================================================
+
+_STAT_RULE_RE = re.compile(r"^\[(\d+):(\d+)\]\s+-A\s+(\S+)\s+(.*)$")
+_MAC_SRC_RE = re.compile(r"--mac-source\s+([0-9A-Fa-f:]{17})", re.IGNORECASE)
+_DST_IP_RE = re.compile(r"(?:^|\s)-d\s+(\d+\.\d+\.\d+\.\d+)(?:/\d+)?")
+
+
+def ensure_stat_chain() -> bool:
+    """Create the accounting chain and jump to it from FORWARD."""
+    if dry_run():
+        return False
+    with _lock:
+        _run(["-w", "-N", STAT_CHAIN])
+        # Position 2: after PCTRL, so enforcement is still evaluated first.
+        _ensure_rule(
+            ["-C", "FORWARD", "-j", STAT_CHAIN],
+            ["-I", "FORWARD", "2", "-j", STAT_CHAIN],
+        )
+    return True
+
+
+def list_stat_rules() -> list[dict[str, Any]]:
+    """Return every rule in the accounting chain, with its byte counters.
+
+    Each entry: ``{n, packets, bytes, mac, dst_ip}`` where ``n`` is the
+    1-based rule number suitable for ``iptables -D <chain> <n>``.
+    """
+    if dry_run():
+        return []
+
+    proc = run_command([IPT_SAVE, "-c", "-t", "filter"])
+    if proc.returncode != 0:
+        log.debug("iptables-save failed: %s", (proc.stderr or "").strip())
+        return []
+
+    rules: list[dict[str, Any]] = []
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line.startswith("["):
+            continue
+        match = _STAT_RULE_RE.match(line)
+        if not match or match.group(3) != STAT_CHAIN:
+            continue
+
+        spec = match.group(4)
+        mac_match = _MAC_SRC_RE.search(spec)
+        dst_match = _DST_IP_RE.search(spec)
+        rules.append(
+            {
+                "n": len(rules) + 1,
+                "packets": int(match.group(1)),
+                "bytes": int(match.group(2)),
+                "mac": (mac_match.group(1).upper() if mac_match else None),
+                "dst_ip": (dst_match.group(1) if dst_match else None),
+                "spec": spec,
+            }
+        )
+    return rules
+
+
+def add_stat_upload_rule(mac: str) -> bool:
+    if dry_run():
+        return False
+    normalised = norm_mac(mac)
+    if not normalised:
+        return False
+    with _lock:
+        return (
+            _run(
+                ["-w", "-A", STAT_CHAIN, "-m", "mac", "--mac-source", normalised, "-j", "RETURN"]
+            ).returncode
+            == 0
+        )
+
+
+def add_stat_download_rule(ip: str) -> bool:
+    if dry_run() or not ip:
+        return False
+    with _lock:
+        return _run(["-w", "-A", STAT_CHAIN, "-d", ip, "-j", "RETURN"]).returncode == 0
+
+
+def delete_stat_rule(rule_number: int) -> bool:
+    """Remove a rule by its 1-based number within the accounting chain."""
+    if dry_run():
+        return False
+    with _lock:
+        return _run(["-w", "-D", STAT_CHAIN, str(int(rule_number))]).returncode == 0
+
+
+def flush_stat_chain() -> bool:
+    """Discard all counters. Only used by tests and explicit resets."""
+    if dry_run():
+        return False
+    with _lock:
+        return _run(["-w", "-F", STAT_CHAIN]).returncode == 0
+
+
+# ==========================================================================
+# DNS interception
+#
+# Clients can bypass a DNS filter simply by talking to 8.8.8.8 directly. These
+# PREROUTING rules redirect every DNS packet arriving from the LAN to the
+# gateway's own resolver, whatever destination address the client used.
+# ==========================================================================
+
+_DNS_PROTOCOLS = ("udp", "tcp")
+
+
+def _dns_rule(lan_iface: str, protocol: str, target_port: int, action: str = "A") -> list[str]:
+    """Redirect LAN DNS traffic to the gateway's own resolver.
+
+    The destination port stays 53 (that is what clients query), while
+    ``--to-ports`` is whatever port the proxy actually listens on.
+    """
+    return [
+        "-t", "nat", action, "PREROUTING",
+        "-i", lan_iface, "-p", protocol, "--dport", "53",
+        "-j", "REDIRECT", "--to-ports", str(int(target_port)),
+    ]
+
+
+def _purge_dns_redirects(lan_iface: str) -> int:
+    """Remove every DNS redirect for this interface, whatever its target port.
+
+    Necessary because the proxy may bind a different port after a restart, and
+    a leftover rule would keep sending client queries at a dead port.
+    """
+    proc = _run(["-w", "-t", "nat", "-S", "PREROUTING"])
+    if proc.returncode != 0:
+        return 0
+
+    doomed: list[list[str]] = []
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line.startswith("-A PREROUTING") or "-j REDIRECT" not in line:
+            continue
+        if f"-i {lan_iface}" not in line or "--dport 53" not in line:
+            continue
+        parts = line.split()
+        doomed.append(["-t", "nat", "-D", "PREROUTING"] + parts[2:])
+
+    removed = 0
+    for spec in doomed:
+        if _run(["-w", *spec]).returncode == 0:
+            removed += 1
+    return removed
+
+
+def setup_dns_redirect(lan_iface: str, enabled: bool = True, target_port: int = 53) -> dict[str, Any]:
+    """Enable or disable forced DNS interception for the LAN interface."""
+    if dry_run():
+        return {"applied": False, "dry_run": True, "enabled": enabled}
+    if not lan_iface:
+        return {"applied": False, "reason": "no LAN interface configured"}
+
+    changed: list[str] = []
+    with _lock:
+        # Always start from a clean slate so port changes cannot leave orphans.
+        removed = _purge_dns_redirects(lan_iface)
+        if removed:
+            changed.append(f"purge {removed}")
+
+        if enabled:
+            for protocol in _DNS_PROTOCOLS:
+                if _run(["-w", *_dns_rule(lan_iface, protocol, target_port, "-A")]).returncode == 0:
+                    changed.append(f"add {protocol}/{target_port}")
+
+    return {"applied": True, "enabled": enabled, "target_port": target_port, "changed": changed}
+
+
+def dns_redirect_active(lan_iface: str, target_port: int = 53) -> bool:
+    if dry_run():
+        return False
+    for protocol in _DNS_PROTOCOLS:
+        if _run(["-w", *_dns_rule(lan_iface, protocol, target_port, "-C")]).returncode != 0:
+            return False
+    return True

@@ -16,6 +16,13 @@ const state = {
   settings: {},
   rules: { filter: '', nat: '' },
   rulesTab: 'filter',
+  usage: null,
+  usageRange: '24h',
+  usageTimer: null,
+  webRules: [],
+  dns: null,
+  dnsQueries: null,
+  settings: null,
   search: '',
   filter: 'all',
   refreshTimer: null,
@@ -149,11 +156,13 @@ function renderAll(data) {
   renderTopbar();
   renderStats();
   renderTimers();
+  renderMasterPause();
   renderGroups();
   renderDevices();
   renderSchedules();
   renderSystem();
   renderActivity();
+  renderRuleGroupOptions();
 }
 
 function renderTopbar() {
@@ -270,6 +279,16 @@ function visibleDevices() {
   });
 }
 
+function renderRuleGroupOptions() {
+  const select = $('#rule-group');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="0">Everyone</option>' + state.groups.map(function (g) {
+    return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>';
+  }).join('');
+  if (current) select.value = current;
+}
+
 function renderDevices() {
   const body = $('#device-body');
   const list = visibleDevices();
@@ -300,6 +319,8 @@ function renderDevices() {
         '</label>' +
       '</td>' +
       '<td class="col-actions"><div class="row-actions">' +
+        (d.approved === false ?
+          '<button class="btn btn-xs btn-primary" data-approve-device="' + esc(d.mac) + '" title="Approve this device">Approve</button>' : '') +
         '<button class="btn btn-xs btn-ghost" data-device-timer="' + esc(d.mac) + '" title="Pause / allow timer">⏱</button>' +
         '<button class="btn btn-xs btn-ghost" data-rename-device="' + esc(d.mac) + '" title="Rename">Rename</button>' +
         '<button class="btn btn-xs btn-danger" data-remove-device="' + esc(d.mac) + '" title="Forget device">✕</button>' +
@@ -358,6 +379,417 @@ function renderSystem() {
     ('Press “Refresh rules” to inspect the live ' + state.rulesTab + ' ruleset.');
 }
 
+/* ================================================================== usage */
+function usageBar(up, down, maxTotal) {
+  const u = Number(up) || 0;
+  const d = Number(down) || 0;
+  const total = u + d;
+  const widthPct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+  const upPct = total > 0 ? (u / total) * widthPct : 0;
+  const downPct = total > 0 ? (d / total) * widthPct : 0;
+  return '<div class="usage-bar">' +
+    '<span class="fill-up" style="width:' + upPct.toFixed(2) + '%"></span>' +
+    '<span class="fill-down" style="width:' + downPct.toFixed(2) + '%"></span>' +
+    '</div>';
+}
+
+function usageRows(list, maxTotal, colourFor) {
+  if (!list.length) return '<p class="muted" style="font-size:12px;margin:0">No data yet.</p>';
+  return list.map(function (item) {
+    const total = Number(item.total) || 0;
+    return '<div class="usage-row ' + (total ? '' : 'zero') + '">' +
+      '<span class="who" title="' + esc(item.name) + '">' +
+        '<span class="dot" style="background:' + esc(colourFor(item)) + '"></span>' + esc(item.name) +
+      '</span>' +
+      usageBar(item.up, item.down, maxTotal) +
+      '<span class="num">' + (window.pgChart ? pgChart.formatBytes(total) : total + ' B') + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function renderUsage(data) {
+  if (!data) return;
+  const fmt = window.pgChart ? pgChart.formatBytes : function (n) { return n + ' B'; };
+  const totals = data.totals || { up: 0, down: 0, total: 0 };
+  const devices = data.devices || [];
+  const groups = data.groups || [];
+
+  $('#usage-meta').textContent =
+    (data.label || '') + ' · sampled every ' + (data.sampling_interval || 60) + 's · ' +
+    (data.granularity || 'raw') + ' resolution';
+
+  $('#usage-summary').innerHTML = [
+    { k: 'Total traffic', v: fmt(totals.total), s: data.label || '', c: '' },
+    { k: 'Download', v: fmt(totals.down), s: 'from the internet', c: 'down' },
+    { k: 'Upload', v: fmt(totals.up), s: 'to the internet', c: 'up' },
+    { k: 'Busiest device', v: devices.length ? devices[0].name : '—',
+      s: devices.length ? fmt(devices[0].total) : 'no data yet', c: '' },
+    { k: 'Devices seen', v: String(devices.filter(function (d) { return d.total > 0; }).length),
+      s: 'of ' + devices.length + ' tracked', c: '' },
+  ].map(function (s) {
+    return '<div class="usage-stat ' + s.c + '"><div class="k">' + esc(s.k) + '</div>' +
+      '<div class="v">' + esc(s.v) + '</div><div class="s">' + esc(s.s) + '</div></div>';
+  }).join('');
+
+  if (window.pgChart) {
+    pgChart.area($('#usage-chart'), {
+      points: data.timeline || [],
+      height: 250,
+      spanSeconds: (data.now || 0) - (data.since || 0),
+      from: data.since,
+      to: data.now,
+      colors: { up: '#22d3ee', down: '#6366f1' },
+      labels: { up: 'Upload', down: 'Download' },
+    });
+  }
+
+  const maxDevice = devices.length ? devices[0].total : 0;
+  const maxGroup = groups.length ? groups[0].total : 0;
+
+  $('#usage-device-count').textContent = devices.length ? devices.length + ' devices' : '';
+  $('#usage-group-count').textContent = groups.length ? groups.length + ' groups' : '';
+  $('#usage-devices').innerHTML = usageRows(devices, maxDevice, function (d) {
+    return d.group_color || '#64748b';
+  });
+  $('#usage-groups').innerHTML = usageRows(groups, maxGroup, function (g) {
+    return g.color || '#64748b';
+  });
+}
+
+async function loadUsage(silent) {
+  try {
+    const data = await api('/api/usage?range=' + encodeURIComponent(state.usageRange || '24h'));
+    state.usage = data;
+    renderUsage(data);
+  } catch (err) {
+    if (!silent) toast('Could not load usage', err.message, 'error');
+  }
+}
+
+function bindUsageControls() {
+  const range = $('#usage-range');
+  if (range) {
+    range.addEventListener('change', function () {
+      state.usageRange = this.value;
+      loadUsage(false);
+    });
+  }
+
+  const refreshBtn = $('#usage-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async function () {
+      refreshBtn.disabled = true;
+      try {
+        await api('/api/usage/sample', { method: 'POST', body: {} });
+        await loadUsage(true);
+        toast('Counters sampled', 'Usage data refreshed', 'ok');
+      } catch (err) {
+        toast('Sample failed', err.message, 'error');
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    });
+  }
+
+  const resetBtn = $('#usage-reset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      confirmDialog('Reset usage history',
+        'Delete all recorded traffic data and zero the kernel counters? This cannot be undone.',
+        'Reset',
+        async function () {
+          try {
+            await api('/api/usage/reset', { method: 'POST', body: {} });
+            await loadUsage(false);
+            toast('Usage history cleared', 'Counters start from zero', 'ok');
+          } catch (err) {
+            toast('Reset failed', err.message, 'error');
+          }
+        });
+    });
+  }
+
+  // Redraw the chart when the panel resizes.
+  let resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (state.usage) renderUsage(state.usage);
+    }, 200);
+  });
+}
+
+/* ========================================================== web filtering */
+function renderFilter() {
+  const dns = state.dns || {};
+  const rules = state.webRules || [];
+  const queries = (state.dnsQueries && state.dnsQueries.queries) || [];
+  const stats = (state.dnsQueries && state.dnsQueries.stats) || {};
+
+  const pill = $('#dns-pill');
+  if (dns.running && dns.interceptable) {
+    pill.innerHTML = '<span class="dot dot-ok"></span>DNS filtering on';
+    pill.title = 'Listening on ' + (dns.bound_to || []).join(':') + ' · upstream ' + (dns.upstreams || []).join(', ');
+    $('#dns-toggle').textContent = 'Stop DNS filter';
+    $('#dns-toggle').classList.remove('btn-primary');
+  } else if (dns.running) {
+    pill.innerHTML = '<span class="dot dot-warn"></span>DNS proxy · not intercepting';
+    pill.title = 'Bound to ' + (dns.bound_to || []).join(':') +
+      ' — NAT REDIRECT cannot reach loopback. Free port ' + dns.port +
+      ' (stop dnsmasq / systemd-resolved) for filtering to take effect.';
+    $('#dns-toggle').textContent = 'Stop DNS filter';
+    $('#dns-toggle').classList.remove('btn-primary');
+  } else {
+    pill.innerHTML = '<span class="dot dot-bad"></span>DNS filtering off';
+    pill.title = 'Rules are stored but nothing is being filtered';
+    $('#dns-toggle').textContent = 'Start DNS filter';
+    $('#dns-toggle').classList.add('btn-primary');
+  }
+
+  $('#filter-stats').innerHTML = [
+    ['Block rules', String(dns.block_rules || 0), ''],
+    ['Allow rules', String(dns.allow_rules || 0), ''],
+    ['Queries seen', String((dns.stats && dns.stats.queries) || 0), 'since start'],
+    ['Blocked', String(stats.blocked || 0), 'in the log'],
+    ['Interception', dns.interception ? 'enforced' : (dns.dry_run ? 'dry-run' : 'off'),
+      dns.interception ? 'cannot be bypassed' : 'clients can use their own DNS'],
+  ].map(function (r) {
+    return '<div class="usage-stat"><div class="k">' + esc(r[0]) + '</div>' +
+      '<div class="v">' + esc(r[1]) + '</div><div class="s">' + esc(r[2]) + '</div></div>';
+  }).join('');
+
+  // rules table
+  $('#rules-empty').hidden = rules.length > 0;
+  $('#rule-body').innerHTML = rules.map(function (r) {
+    return '<tr>' +
+      '<td class="mono">' + esc(r.pattern) + '</td>' +
+      '<td>' + esc(r.group_name || 'Everyone') + '</td>' +
+      '<td><span class="reason-chip ' + (r.action === 'allow' ? 'none' : '') + '" ' +
+        'style="' + (r.action === 'allow'
+          ? 'background:rgba(52,211,153,.15);color:#a7f3d0;border-color:rgba(52,211,153,.3)'
+          : '') + '">' + esc(r.action) + '</span></td>' +
+      '<td class="col-actions"><div class="row-actions">' +
+        '<button class="btn btn-xs btn-ghost" data-rule-toggle="' + esc(r.id) + '" data-enabled="' + r.enabled + '">' +
+          (r.enabled ? 'Disable' : 'Enable') + '</button>' +
+        '<button class="btn btn-xs btn-danger" data-rule-delete="' + esc(r.id) + '">✕</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+
+  // query log
+  $('#dns-query-count').textContent = queries.length ? queries.length + ' shown' : '';
+  $('#dns-query-log').innerHTML = queries.length
+    ? queries.map(function (q) {
+        return '<div class="query-row ' + esc(q.action) + '">' +
+          '<span class="dot ' + (q.action === 'blocked' ? 'dot-bad' : 'dot-ok') + '"></span>' +
+          '<span class="q-domain">' + esc(q.domain) + '</span>' +
+          '<span class="q-device">' + esc(q.device_name || q.ip || '') + '</span>' +
+          '<span class="q-time">' + esc(fmtTime(q.ts)) + '</span>' +
+        '</div>';
+      }).join('')
+    : '<p class="muted" style="font-size:12px;margin:0">No queries recorded yet.</p>';
+}
+
+async function loadFilter(silent) {
+  try {
+    const results = await Promise.all([
+      api('/api/web-rules'),
+      api('/api/dns/status'),
+      api('/api/dns/queries?limit=60'),
+    ]);
+    state.webRules = results[0].rules || [];
+    state.dns = results[1];
+    state.dnsQueries = results[2];
+    renderFilter();
+  } catch (err) {
+    if (!silent) toast('Could not load web filtering', err.message, 'error');
+  }
+}
+
+function bindFilterControls() {
+  const form = $('#rule-form');
+  if (form) {
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const pattern = $('#rule-pattern').value.trim();
+      if (!pattern) { toast('Pattern required', 'Enter a domain such as youtube.com', 'error'); return; }
+      try {
+        await api('/api/web-rules', {
+          method: 'POST',
+          body: {
+            pattern: pattern,
+            action: $('#rule-action').value,
+            group_id: $('#rule-group').value || 0,
+          },
+        });
+        $('#rule-pattern').value = '';
+        toast('Rule added', pattern, 'ok');
+        await loadFilter(true);
+      } catch (err) {
+        toast('Could not add rule', err.message, 'error');
+      }
+    });
+  }
+
+  const toggle = $('#dns-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', async function () {
+      const running = state.dns && state.dns.running;
+      toggle.disabled = true;
+      try {
+        await api(running ? '/api/dns/stop' : '/api/dns/start', { method: 'POST', body: {} });
+        toast(running ? 'DNS filtering stopped' : 'DNS filtering started', '', running ? 'warn' : 'ok');
+        await loadFilter(true);
+      } catch (err) {
+        toast('Could not change DNS filtering', err.message, 'error');
+      } finally {
+        toggle.disabled = false;
+      }
+    });
+  }
+
+  const refresh = $('#dns-queries-refresh');
+  if (refresh) refresh.addEventListener('click', function () { loadFilter(false); });
+
+  document.addEventListener('click', async function (event) {
+    const target = event.target;
+    let attr;
+
+    if ((attr = target.closest('[data-rule-delete]'))) {
+      const id = attr.getAttribute('data-rule-delete');
+      confirmDialog('Delete rule', 'Remove this web filtering rule?', 'Delete', async function () {
+        try {
+          await api('/api/web-rules/' + id, { method: 'DELETE' });
+          toast('Rule deleted', '', 'ok');
+          await loadFilter(true);
+        } catch (err) {
+          toast('Could not delete rule', err.message, 'error');
+        }
+      });
+      return;
+    }
+
+    if ((attr = target.closest('[data-rule-toggle]'))) {
+      const id = attr.getAttribute('data-rule-toggle');
+      const enabled = attr.getAttribute('data-enabled') === 'true';
+      try {
+        await api('/api/web-rules/' + id, { method: 'PATCH', body: { enabled: !enabled } });
+        await loadFilter(true);
+      } catch (err) {
+        toast('Could not update rule', err.message, 'error');
+      }
+    }
+  });
+}
+
+/* ================================================================ settings */
+async function loadSettings() {
+  try {
+    const data = await api('/api/settings');
+    state.settings = data;
+    const autoblock = $('#set-autoblock');
+    const dns = $('#set-dns');
+    if (autoblock) autoblock.checked = !!data.auto_block_unknown;
+    if (dns) dns.checked = !!data.dns_filtering;
+  } catch (err) { /* non-fatal */ }
+}
+
+function bindSettings() {
+  const autoblock = $('#set-autoblock');
+  if (autoblock) {
+    autoblock.addEventListener('change', async function () {
+      const on = this.checked;
+      try {
+        await api('/api/settings', { method: 'PATCH', body: { auto_block_unknown: on } });
+        toast(on ? 'Unknown devices will be blocked' : 'Unknown devices allowed',
+          on ? 'New MACs need approving' : '', on ? 'warn' : 'ok');
+        await refresh(true);
+      } catch (err) {
+        this.checked = !on;
+        toast('Could not save setting', err.message, 'error');
+      }
+    });
+  }
+
+  const dns = $('#set-dns');
+  if (dns) {
+    dns.addEventListener('change', async function () {
+      const on = this.checked;
+      try {
+        await api('/api/settings', { method: 'PATCH', body: { dns_filtering: on } });
+        toast(on ? 'DNS filtering enabled' : 'DNS filtering disabled', '', on ? 'ok' : 'warn');
+        await loadFilter(true);
+      } catch (err) {
+        this.checked = !on;
+        toast('Could not save setting', err.message, 'error');
+      }
+    });
+  }
+}
+
+/* ============================================================== pause all */
+function masterPause() {
+  const body =
+    '<p class="muted" style="margin-top:0">Cut off internet access for <strong>every device</strong> on the network.</p>' +
+    '<div class="modal-section-title">Pause for</div>' +
+    '<div class="choice-grid">' +
+      '<button class="choice danger" data-master-minutes="15">15 min</button>' +
+      '<button class="choice danger" data-master-minutes="30">30 min</button>' +
+      '<button class="choice danger" data-master-minutes="60">1 hour</button>' +
+      '<button class="choice danger" data-master-minutes="120">2 hours</button>' +
+    '</div>' +
+    '<div class="modal-section-title">Or until you say otherwise</div>' +
+    '<div class="choice-grid">' +
+      '<button class="choice danger" data-master-minutes="indefinite">Until resumed…</button>' +
+    '</div>';
+
+  openModal('Pause internet', body, '<button class="btn btn-ghost" data-close-modal>Cancel</button>');
+
+  $('#modal-body').onclick = async function (event) {
+    const btn = event.target.closest('[data-master-minutes]');
+    if (!btn) return;
+    const raw = btn.getAttribute('data-master-minutes');
+    const payload = raw === 'indefinite' ? { label: 'Paused (all devices)' } : { minutes: parseInt(raw, 10) };
+    try {
+      await api('/api/pause-all', { method: 'POST', body: payload });
+      closeModal();
+      toast('Internet paused', raw === 'indefinite' ? 'All devices · until resumed' : 'All devices · ' + raw + ' minutes', 'warn');
+      await refresh(true);
+      await loadFilter(true);
+    } catch (err) {
+      toast('Could not pause', err.message, 'error');
+    }
+  };
+}
+
+async function masterResume() {
+  try {
+    await api('/api/resume-all', { method: 'POST', body: {} });
+    toast('Internet resumed', 'All devices', 'ok');
+    await refresh(true);
+  } catch (err) {
+    toast('Could not resume', err.message, 'error');
+  }
+}
+
+function renderMasterPause() {
+  const btn = $('#btn-pause-all');
+  if (!btn) return;
+  const active = (state.pauses || []).find(function (p) { return p.target_type === 'all'; });
+  if (active) {
+    btn.classList.remove('btn-danger');
+    btn.classList.add('btn-primary');
+    btn.querySelector('span').textContent = 'Resume all';
+    btn.title = 'Internet is paused for every device · ' + active.remaining_human;
+  } else {
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-danger');
+    btn.querySelector('span').textContent = 'Pause all';
+    btn.title = 'Pause internet for every device on the network';
+  }
+}
+
+/* ================================================================= activity */
 function renderActivity() {
   const list = $('#activity-list');
   if (!state.events.length) {
@@ -658,6 +1090,16 @@ async function loadRules() {
 
 /* ================================================================ wiring */
 function bindEvents() {
+  bindUsageControls();
+  bindFilterControls();
+  bindSettings();
+
+  $('#btn-pause-all').addEventListener('click', function () {
+    const active = (state.pauses || []).find(function (p) { return p.target_type === 'all'; });
+    if (active) masterResume();
+    else masterPause();
+  });
+
   $('#btn-scan').addEventListener('click', doScan);
   $('#btn-reconcile').addEventListener('click', doReconcile);
   $('#btn-rules').addEventListener('click', loadRules);
@@ -760,6 +1202,21 @@ function bindEvents() {
       return;
     }
 
+    if ((attr = target.closest('[data-approve-device]'))) {
+      const mac = attr.getAttribute('data-approve-device');
+      try {
+        await api('/api/devices/' + encodeURIComponent(mac) + '/approve', {
+          method: 'POST',
+          body: { approved: true },
+        });
+        toast('Device approved', (deviceByMac(mac) || {}).name || mac, 'ok');
+        await refresh(true);
+      } catch (err) {
+        toast('Could not approve device', err.message, 'error');
+      }
+      return;
+    }
+
     if ((attr = target.closest('[data-device-timer]'))) {
       const device = deviceByMac(attr.getAttribute('data-device-timer'));
       if (device) openTimerDialog('device', device.mac, device.name);
@@ -834,6 +1291,8 @@ function bindEvents() {
 
 function startTimers() {
   state.refreshTimer = setInterval(function () { refresh(true); }, 30000);
+  state.usageTimer = setInterval(function () { loadUsage(true); }, 60000);
+  state.filterTimer = setInterval(function () { loadFilter(true); }, 45000);
   state.tickTimer = setInterval(function () {
     const now = Date.now() / 1000;
     $$('[data-countdown]').forEach(function (el) {
@@ -870,6 +1329,9 @@ async function init() {
   try {
     const data = await api('/api/overview');
     renderAll(data);
+    loadUsage(true);
+    loadFilter(true);
+    loadSettings();
     if (!state.status.firewall.dry_run && state.status.policy.error) {
       toast('Firewall error', state.status.policy.error, 'error');
     }

@@ -9,11 +9,16 @@ from typing import Any
 from flask import Blueprint, g, jsonify, request
 
 from .. import engine, firewall, gateway, scheduler
+from .. import dnsfilter
 from .. import settings as runtime_settings
+from .. import usage as traffic
 from ..config import Config
 from ..db import log_event, recent_events
 from ..models import (
     add_pause,
+    add_web_rule,
+    approve_all_devices,
+    approve_device,
     clear_pause,
     clear_pauses,
     create_group,
@@ -21,16 +26,25 @@ from ..models import (
     delete_device,
     delete_group,
     delete_schedule,
+    delete_web_rule,
+    dns_query_stats,
     get_device,
     get_group,
     get_schedule,
+    get_setting,
     list_devices,
+    list_dns_queries,
     list_groups,
     list_pauses,
     list_schedules,
+    list_unapproved,
+    list_web_rules,
+    set_setting,
     update_device,
     update_group,
     update_schedule,
+    update_web_rule,
+    web_rules_as_objects,
 )
 from ..security import (
     api_auth,
@@ -90,6 +104,7 @@ def _device_payload(device: dict[str, Any], decisions: dict[str, Any], now_ts: i
         "group_color": device.get("group_color"),
         "blocked": bool(device.get("blocked")),
         "group_blocked": bool(device.get("group_blocked")),
+        "approved": bool(device.get("approved", True)),
         "effective_blocked": bool(decision.get("blocked", False)),
         "reason": decision.get("reason"),
         "online": online,
@@ -100,6 +115,7 @@ def _device_payload(device: dict[str, Any], decisions: dict[str, Any], now_ts: i
 
 def _pause_payload(pause: dict[str, Any], now_ts: int) -> dict[str, Any]:
     remaining = max(0, int(pause["expires_at"]) - now_ts)
+    indefinite = remaining > 30 * 86400  # "until resumed" sentinel
     return {
         "id": pause["id"],
         "target_type": pause["target_type"],
@@ -109,7 +125,8 @@ def _pause_payload(pause: dict[str, Any], now_ts: int) -> dict[str, Any]:
         "created_at": pause["created_at"],
         "expires_at": pause["expires_at"],
         "remaining_seconds": remaining,
-        "remaining_human": humanise_duration(remaining),
+        "remaining_human": "until resumed" if indefinite else humanise_duration(remaining),
+        "indefinite": indefinite,
     }
 
 
@@ -667,6 +684,316 @@ def system_nat():
 def events():
     limit = min(200, max(5, int(request.args.get("limit", 40))))
     return jsonify({"events": recent_events(limit)})
+
+
+# --------------------------------------------------------------------------
+# Traffic usage
+# --------------------------------------------------------------------------
+@bp.get("/usage")
+@api_auth
+def usage():
+    """Aggregated traffic for the dashboard's usage graphs.
+
+    Query params:
+      range   one of 1h, 24h, 7d, 30d, 90d (default 24h)
+      refresh force a counter sample before answering
+    """
+    range_key = request.args.get("range") or traffic.DEFAULT_RANGE
+    if request.args.get("refresh"):
+        try:
+            traffic.sample()
+        except Exception:  # noqa: BLE001
+            log_event("Usage sample failed", level="warn", source="usage")
+    return jsonify(traffic.query(range_key))
+
+
+@bp.get("/usage/status")
+@api_auth
+def usage_status():
+    return jsonify(traffic.status())
+
+
+@bp.post("/usage/sample")
+@api_auth
+def usage_sample():
+    """Take a counter sample immediately (used by the UI's refresh button)."""
+    try:
+        result = traffic.sample()
+    except Exception as exc:  # noqa: BLE001
+        return _json_error(f"sampling failed: {exc}")
+    return jsonify({"ok": True, "sample": result})
+
+
+@bp.post("/usage/reset")
+@api_auth
+def usage_reset():
+    traffic.reset()
+    log_event("Traffic usage counters reset", source="usage")
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Master pause ("dinner time")
+# --------------------------------------------------------------------------
+@bp.post("/pause-all")
+@api_auth
+def pause_all():
+    """Pause internet for every device at once, optionally on a timer."""
+    body = _body()
+    raw = body.get("minutes")
+    label = (body.get("label") or "").strip() or None
+
+    clear_pauses("all", "*")
+
+    if raw in (None, "", 0, "0"):
+        add_pause("all", "*", "block", None, label or "Paused (all devices)")
+        engine.reconcile(force=True)
+        log_event("Internet paused for all devices until resumed", source="controls")
+        return jsonify({"ok": True, "paused": True, "minutes": None, "indefinite": True})
+
+    try:
+        minutes = int(raw)
+    except (TypeError, ValueError):
+        return _json_error("minutes must be a number")
+
+    try:
+        add_pause("all", "*", "block", minutes, label or "Paused (all devices)")
+    except ValueError as exc:
+        return _json_error(str(exc))
+
+    engine.reconcile(force=True)
+    log_event(f"Paused internet for all devices for {humanise_duration(minutes * 60)}", source="controls")
+    return jsonify({"ok": True, "paused": True, "minutes": minutes, "indefinite": False})
+
+
+@bp.post("/resume-all")
+@api_auth
+def resume_all():
+    clear_pauses("all", "*")
+    engine.reconcile(force=True)
+    log_event("Internet resumed for all devices", source="controls")
+    return jsonify({"ok": True, "paused": False})
+
+
+# --------------------------------------------------------------------------
+# Device approval (unknown-device quarantine)
+# --------------------------------------------------------------------------
+@bp.post("/devices/<mac>/approve")
+@api_auth
+def device_approve(mac: str):
+    if not get_device(mac):
+        return _json_error("device not found", 404)
+    approved = bool(_body().get("approved", True))
+    approve_device(mac, approved)
+    engine.reconcile(force=True)
+    log_event(f"{'Approved' if approved else 'Unapproved'} device {mac}", source="devices")
+    return jsonify({"ok": True})
+
+
+@bp.post("/devices/approve-all")
+@api_auth
+def device_approve_all():
+    count = approve_all_devices()
+    engine.reconcile(force=True)
+    log_event(f"Approved {count} pending device(s)", source="devices")
+    return jsonify({"ok": True, "approved": count})
+
+
+@bp.get("/devices/unapproved")
+@api_auth
+def devices_unapproved():
+    decisions = engine.last_result().get("decisions") or {}
+    now = to_ts()
+    return jsonify(
+        {"devices": [_device_payload(d, decisions, now) for d in list_unapproved()]}
+    )
+
+
+# --------------------------------------------------------------------------
+# Web filtering rules
+# --------------------------------------------------------------------------
+def _rule_payload(rule: dict[str, Any]) -> dict[str, Any]:
+    group_id = int(rule.get("group_id") or 0)
+    return {
+        "id": rule["id"],
+        "group_id": group_id,
+        "group_name": rule.get("group_name") or ("Everyone" if group_id == 0 else None),
+        "pattern": rule["pattern"],
+        "action": rule["action"],
+        "enabled": bool(rule["enabled"]),
+        "source": rule.get("source") or "custom",
+    }
+
+
+@bp.get("/web-rules")
+@api_auth
+def web_rules():
+    group_id = request.args.get("group_id")
+    gid = int(group_id) if group_id not in (None, "") else None
+    return jsonify({"rules": [_rule_payload(r) for r in list_web_rules(gid)]})
+
+
+@bp.post("/web-rules")
+@api_auth
+def web_rules_create():
+    body = _body()
+    pattern = (body.get("pattern") or "").strip()
+    action = body.get("action") or "block"
+    group_id = body.get("group_id") or 0
+    if group_id not in (0, "0", None) and not get_group(int(group_id)):
+        return _json_error("group not found", 404)
+
+    try:
+        rule_id = add_web_rule(int(group_id), pattern, action)
+    except ValueError as exc:
+        return _json_error(str(exc))
+
+    _reload_dns_rules()
+    log_event(f"Web filter: {action} {pattern}", source="filter")
+    return jsonify({"ok": True, "rule": _rule_payload(next(r for r in list_web_rules() if r["id"] == rule_id))})
+
+
+@bp.patch("/web-rules/<int:rule_id>")
+@api_auth
+def web_rules_update(rule_id: int):
+    body = _body()
+    fields = {k: body[k] for k in ("pattern", "action", "enabled") if k in body}
+    try:
+        if not update_web_rule(rule_id, **fields):
+            return _json_error("rule not found", 404)
+    except ValueError as exc:
+        return _json_error(str(exc))
+    _reload_dns_rules()
+    return jsonify({"ok": True})
+
+
+@bp.delete("/web-rules/<int:rule_id>")
+@api_auth
+def web_rules_delete(rule_id: int):
+    if not delete_web_rule(rule_id):
+        return _json_error("rule not found", 404)
+    _reload_dns_rules()
+    log_event(f"Web filter: removed rule #{rule_id}", source="filter")
+    return jsonify({"ok": True})
+
+
+def _reload_dns_rules() -> None:
+    try:
+        dnsfilter.get_proxy().set_rules(web_rules_as_objects())
+    except Exception:  # noqa: BLE001
+        log_event("Could not reload DNS filter rules", level="warn", source="filter")
+
+
+# --------------------------------------------------------------------------
+# DNS proxy
+# --------------------------------------------------------------------------
+@bp.get("/dns/status")
+@api_auth
+def dns_status():
+    proxy = dnsfilter.get_proxy()
+    lan = runtime_settings.lan_iface()
+    rules = list_web_rules()
+    return jsonify(
+        {
+            "running": proxy.is_running(),
+            "port": proxy.port,
+            "listen_port": proxy.listen_port,
+            "interceptable": proxy.interceptable,
+            "bound_to": list(proxy.bound_to) if proxy.bound_to else None,
+            "upstreams": list(proxy.upstreams),
+            "stats": dict(proxy.stats),
+            "interception": (
+                firewall.dns_redirect_active(lan, target_port=proxy.listen_port) if not firewall.dry_run() else False
+            ),
+            "lan_iface": lan,
+            "rule_count": len(rules),
+            "block_rules": sum(1 for r in rules if r["action"] == "block" and r["enabled"]),
+            "allow_rules": sum(1 for r in rules if r["action"] == "allow" and r["enabled"]),
+            "dry_run": firewall.dry_run(),
+        }
+    )
+
+
+@bp.post("/dns/start")
+@api_auth
+def dns_start():
+    proxy = dnsfilter.get_proxy()
+    proxy.set_rules(web_rules_as_objects())
+    started = proxy.start()
+    interception = firewall.setup_dns_redirect(
+        runtime_settings.lan_iface(), enabled=started, target_port=proxy.listen_port
+    )
+    log_event("DNS filtering started" if started else "DNS filtering failed to start",
+              level="info" if started else "error", source="filter")
+    return jsonify({"ok": started, "running": proxy.is_running(), "interception": interception})
+
+
+@bp.post("/dns/stop")
+@api_auth
+def dns_stop():
+    proxy = dnsfilter.get_proxy()
+    firewall.setup_dns_redirect(runtime_settings.lan_iface(), enabled=False, target_port=proxy.listen_port)
+    proxy.stop()
+    log_event("DNS filtering stopped", source="filter")
+    return jsonify({"ok": True, "running": proxy.is_running()})
+
+
+@bp.get("/dns/queries")
+@api_auth
+def dns_queries():
+    limit = request.args.get("limit", 100)
+    return jsonify(
+        {
+            "queries": list_dns_queries(
+                limit=int(limit),
+                action=request.args.get("action"),
+                search=request.args.get("q"),
+                mac=request.args.get("mac"),
+            ),
+            "stats": dns_query_stats(),
+        }
+    )
+
+
+# --------------------------------------------------------------------------
+# Settings
+# --------------------------------------------------------------------------
+@bp.get("/settings")
+@api_auth
+def settings_get():
+    return jsonify(_settings_payload())
+
+
+def _settings_payload() -> dict[str, Any]:
+    return {
+        "auto_block_unknown": get_setting("auto_block_unknown", "0") == "1",
+        "dns_filtering": get_setting("dns_filtering", "1") == "1",
+        "min_password_length": Config.MIN_PASSWORD_LENGTH,
+        "usage_enabled": Config.USAGE_ENABLED,
+    }
+
+
+@bp.patch("/settings")
+@api_auth
+def settings_patch():
+    body = _body()
+    if "auto_block_unknown" in body:
+        set_setting("auto_block_unknown", "1" if body["auto_block_unknown"] else "0")
+    if "dns_filtering" in body:
+        enabled = bool(body["dns_filtering"])
+        set_setting("dns_filtering", "1" if enabled else "0")
+        proxy = dnsfilter.get_proxy()
+        if enabled:
+            proxy.set_rules(web_rules_as_objects())
+            if not proxy.is_running():
+                proxy.start()
+            firewall.setup_dns_redirect(runtime_settings.lan_iface(), enabled=True, target_port=proxy.listen_port)
+        else:
+            firewall.setup_dns_redirect(runtime_settings.lan_iface(), enabled=False, target_port=proxy.listen_port)
+            proxy.stop()
+
+    engine.reconcile(force=True)
+    return jsonify({"ok": True, "settings": _settings_payload()})
 
 
 @bp.errorhandler(404)

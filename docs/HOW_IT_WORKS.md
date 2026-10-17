@@ -264,7 +264,8 @@ Every source of truth has a priority. The highest priority wins.
 | Priority | Source | Effect |
 |---:|---|---|
 | **100** | Manual **Block** — device toggle *or* its group's toggle | 🔴 blocked |
-| **80** | **Pause** timer — "pause internet for 30 min" | 🔴 blocked |
+| **90** | **Unapproved device** — a new MAC held in quarantine | 🔴 blocked |
+| **80** | **Pause** timer — "pause internet for 30 min", including the master **Pause all** | 🔴 blocked |
 | **60** | **Allow** timer — "allow for 1 hour" | 🟢 allowed |
 | **40** | Weekly **schedule** window | 🔴 blocked |
 | **0** | *(nothing applies)* | 🟢 allowed |
@@ -325,6 +326,68 @@ An IP filter is trivial to evade — set a static address. A MAC filter binds th
 rule to the physical device. It's not unforgeable (a determined user can clone
 a MAC), but for family use it's the right trade-off, and it keeps rules
 survivable across DHCP renewals.
+
+---
+
+## 10b. Filtering websites
+
+Blocking a device is blunt. Website filtering is finer-grained: the same device
+stays online, but particular domains stop resolving.
+
+**Where the decision happens.** A DNS proxy listens on port 53. Every query
+gets checked against the rule table and, if it matches a block rule, answered
+with `NXDOMAIN` — the client sees "this domain does not exist" and the browser
+shows its usual error page.
+
+**Why it can't be bypassed.** A filter that clients can dodge by pointing at
+`8.8.8.8` is decoration. An `iptables` NAT rule in `PREROUTING` redirects
+*every* packet arriving from the LAN on port 53 — UDP and TCP, any destination
+— to the gateway's own resolver.
+
+```
+-A PREROUTING -i eth1 -p udp --dport 53 -j REDIRECT --to-ports 53
+-A PREROUTING -i eth1 -p tcp --dport 53 -j REDIRECT --to-ports 53
+```
+
+**Rule semantics.** A pattern covers the domain and all its subdomains;
+`*.example.com` covers subdomains only. The **most specific** matching rule
+wins, and ties go to **allow** — so `youtube.com` can be blocked while
+`kids.youtube.com` stays reachable. Rules scoped to a group apply only to that
+group's devices; rules scoped to *Everyone* apply to all.
+
+**What it does not do.** It filters DNS, not content. Encrypted-DNS (DoH/DoT)
+and VPNs bypass it, and it can't see paths inside a permitted domain. For a
+family network that is usually the right trade-off, but it is a filter, not a
+guarantee.
+
+---
+
+## 10c. Measuring traffic
+
+Every `iptables` rule carries a byte counter. A second chain, `PCTRL-STAT`,
+holds one rule per device:
+
+```
+-A PCTRL-STAT -m mac --mac-source AA:BB:CC:DD:EE:01 -j RETURN   <- upload
+-A PCTRL-STAT -d 192.168.1.10/32 -j RETURN                      <- download
+```
+
+Upload is matched by MAC; download arrives addressed to the *gateway*, so it
+is matched by the device's IP instead. The chain is deliberately **never
+flushed** — rules are added and removed individually as devices come and go —
+so the counters keep running.
+
+Every `USAGE_INTERVAL_SECONDS` the counters are read and the *delta* since the
+last sample is stored. Data is rolled up as it goes:
+
+| Table | Keeps | Used for |
+|---|---|---|
+| `usage_samples` | 48 h | fine-grained graphs |
+| `usage_hourly` | 90 days | 7-day / 30-day views |
+| `usage_daily` | indefinitely | long-term history |
+
+Because each sample is added to both rollups incrementally, querying a year of
+history touches a few hundred rows, not millions.
 
 ---
 
@@ -449,11 +512,14 @@ parental-gateway/
 │   ├── settings.py          runtime settings (DB over env)
 │   ├── security.py          users, sessions, CSRF, throttling
 │   ├── models.py            devices / groups / pauses / schedules
-│   ├── scanner.py           ARP discovery            ─┐
-│   ├── engine.py            policy evaluation         │ control plane
-│   ├── firewall.py          PCTRL chain management    │
-│   ├── gateway.py           forwarding + NAT         ─┘
-│   ├── scheduler.py         background reconcile + scan
+│   ├── docs.py              Markdown -> HTML renderer
+│   ├── dnsfilter.py         domain matching + DNS proxy   ─┐
+│   ├── scanner.py           ARP discovery                  │
+│   ├── usage.py             byte counters -> aggregates    │ control plane
+│   ├── engine.py            policy evaluation               │
+│   ├── firewall.py          PCTRL chain management          │
+│   ├── gateway.py           forwarding + NAT               ─┘
+│   ├── scheduler.py         background reconcile + scan + sample
 │   ├── routes/
 │   │   ├── web.py           HTML pages
 │   │   └── api.py           JSON API
@@ -477,12 +543,14 @@ parental-gateway/
 | Add a new rule source (e.g. per-device time budgets) | `engine.py` (add a priority + a `decide()` call) |
 | Support nftables instead of iptables | `firewall.py` (same interface, different backend) |
 | Change how devices are discovered | `scanner.py` |
+| Change how websites are matched/blocked | `dnsfilter.py` (pure logic, no I/O) |
 | Add a dashboard panel | `templates/dashboard.html` + `static/js/app.js` |
+| Change or add a chart | `static/js/chart.js` |
 | Add an API endpoint | `routes/api.py`, wrap it in `@api_auth` |
 | Change defaults or add a setting | `config.py` and `.env.example` |
 | Edit or add documentation | the `.md` file in `docs/`, then `python scripts/build_docs.py` |
 | Change how docs look | `app/static/css/docs.css` |
-| Alter the schema | `db.py` (add the `CREATE TABLE` and bump nothing — `IF NOT EXISTS` handles fresh installs) |
+| Alter the schema | `db.py` (add the `CREATE TABLE`; `_migrate()` handles existing databases) |
 
 ---
 

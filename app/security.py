@@ -90,7 +90,13 @@ def ensure_admin_user() -> None:
         # Treat the old documented placeholder as "not configured" so legacy
         # .env files get the wizard rather than a publicly known password.
         if Config.REQUIRE_SETUP_WIZARD or not password or password == "change-me-please":
-            log.info("no administrator configured - first-run setup wizard enabled")
+            if count_users() == 0:
+                log.info("no administrator configured - first-run setup wizard enabled")
+            else:
+                log.info(
+                    "user %r not found, but %d account(s) exist - wizard stays closed",
+                    Config.ADMIN_USERNAME, count_users(),
+                )
             return
         create_user(Config.ADMIN_USERNAME, password)
         log.info("created bootstrap user %r from environment", Config.ADMIN_USERNAME)

@@ -25,12 +25,14 @@ os.environ.setdefault("FIREWALL_MODE", "off")
 os.environ.setdefault("GATEWAY_MODE", "0")
 os.environ.setdefault("SCAN_INTERVAL_MINUTES", "0")
 os.environ.setdefault("RECONCILE_INTERVAL_SECONDS", "3600")
+os.environ.setdefault("DNS_PORT", "53999")
+os.environ.setdefault("USAGE_INTERVAL_SECONDS", "3600")
 
 from app import create_app  # noqa: E402
 from app import engine  # noqa: E402
 from app import settings as runtime_settings  # noqa: E402
 from app.db import init_db  # noqa: E402
-from app.models import upsert_device  # noqa: E402
+from app.models import upsert_device, web_rules_as_objects  # noqa: E402
 
 PASS, FAIL = 0, 0
 CREDS = {"username": "admin", "password": "test-password-123"}
@@ -229,6 +231,207 @@ def main() -> int:
     check("headings get anchors", 'id="' in rendered and "#1-the-one-paragraph-version" in rendered,
           "toc anchor missing")
     check("doc tabs present", all(s in rendered for s in ("How it works", "Deployment", "Reference")))
+
+    # ==================================================================
+    print("\n-- traffic usage accounting --")
+    from app import usage as traffic
+
+    empty = client.get("/api/usage").get_json()
+    check("usage endpoint responds", "timeline" in empty and "devices" in empty and "groups" in empty)
+    check("usage has totals block", set(empty["totals"]) >= {"up", "down", "total"})
+    check("usage lists every device", len(empty["devices"]) == 2, str(len(empty["devices"])))
+    check("unknown range falls back", client.get("/api/usage?range=nonsense").status_code == 200)
+
+    # feed known samples through the same path the sampler uses
+    now_ts = traffic.to_ts()
+    traffic._persist([
+        (now_ts, "AA:BB:CC:DD:EE:01", 1000, 9000),
+        (now_ts, "AA:BB:CC:DD:EE:02", 500, 500),
+        (now_ts, "AA:BB:CC:DD:EE:01", 2000, 0),
+    ])
+
+    got = traffic.query("24h")
+    check("totals aggregated", got["totals"] == {"up": 3500, "down": 9500, "total": 13000}, str(got["totals"]))
+    check("devices sorted by usage", got["devices"][0]["mac"] == "AA:BB:CC:DD:EE:01", str(got["devices"][0]))
+    check("device up/down split",
+          got["devices"][0]["up"] == 3000 and got["devices"][0]["down"] == 9000, str(got["devices"][0]))
+    check("custom name used", got["devices"][0]["name"] == "Sam's Tablet", got["devices"][0]["name"])
+    check("percentages computed", abs(got["devices"][0]["percent"] - 92.3) < 0.2, str(got["devices"][0]["percent"]))
+
+    names = {g["name"]: g for g in got["groups"]}
+    check("group rollup correct", names.get("Kids", {}).get("total") == 12000, str(names.get("Kids")))
+    check("ungrouped bucket created", names.get("Ungrouped", {}).get("total") == 1000, str(names.get("Ungrouped")))
+    check("group device counts", names["Kids"]["device_count"] == 1 and names["Ungrouped"]["device_count"] == 1)
+    check("timeline bucketed", len(got["timeline"]) > 0 and all("ts" in p and "total" in p for p in got["timeline"]))
+    check("timeline sums to totals",
+          sum(p["total"] for p in got["timeline"]) == 13000,
+          str(sum(p["total"] for p in got["timeline"])))
+
+    # rollups must accumulate independently of the raw table
+    hourly = traffic.rows("SELECT SUM(up) AS u, SUM(down) AS d FROM usage_hourly")[0]
+    check("hourly rollup matches", (hourly["u"], hourly["d"]) == (3500, 9500), str(hourly))
+    daily = traffic.rows("SELECT SUM(up) AS u, SUM(down) AS d FROM usage_daily")[0]
+    check("daily rollup matches", (daily["u"], daily["d"]) == (3500, 9500), str(daily))
+
+    check("range filtering excludes nothing for 24h", traffic.query("24h")["totals"]["total"] == 13000)
+    check("1h range uses raw samples", traffic.query("1h")["granularity"] == "raw")
+    check("7d range uses hourly rollups", traffic.query("7d")["granularity"] == "hourly")
+    check("90d range uses daily rollups", traffic.query("90d")["granularity"] == "daily")
+
+    check("usage status", client.get("/api/usage/status").status_code == 200)
+    check("manual sample", client.post("/api/usage/sample", json={}, headers=headers).status_code == 200)
+    check("reset clears everything",
+          client.post("/api/usage/reset", json={}, headers=headers).status_code == 200
+          and traffic.query("24h")["totals"]["total"] == 0)
+
+    # ==================================================================
+    print("\n-- web filtering: pattern matching --")
+    from app import dnsfilter
+
+    check("apex matches itself", dnsfilter.pattern_matches("example.com", "example.com"))
+    check("apex matches subdomain", dnsfilter.pattern_matches("example.com", "www.example.com"))
+    check("apex matches deep subdomain", dnsfilter.pattern_matches("example.com", "a.b.c.example.com"))
+    check("does not match lookalike", not dnsfilter.pattern_matches("example.com", "notexample.com"))
+    check("does not match suffix collision", not dnsfilter.pattern_matches("ample.com", "example.com"))
+    check("wildcard excludes apex", not dnsfilter.pattern_matches("*.example.com", "example.com"))
+    check("wildcard matches subdomain", dnsfilter.pattern_matches("*.example.com", "mail.example.com"))
+    check("leading dot stripped", dnsfilter.pattern_matches(".example.com", "www.example.com"))
+    check("url form normalised", dnsfilter.normalise_pattern("https://Sub.Example.com/path") == "sub.example.com")
+    check("port stripped", dnsfilter.normalise_pattern("example.com:8443") == "example.com")
+
+    rs = dnsfilter.RuleSet([
+        dnsfilter.Rule("example.com", "block"),
+        dnsfilter.Rule("kids.example.com", "allow"),
+    ])
+    check("block matches apex", rs.decide("example.com")["action"] == "blocked", str(rs.decide("example.com")))
+    check("allow wins on more specific", rs.decide("kids.example.com")["action"] == "allowed",
+          str(rs.decide("kids.example.com")))
+    check("specific allow covers subdomains", rs.decide("cdn.kids.example.com")["action"] == "allowed")
+    check("block still applies elsewhere", rs.decide("video.example.com")["action"] == "blocked")
+    check("unmatched domain allowed", rs.decide("bbc.co.uk")["action"] == "allowed")
+
+    tie = dnsfilter.RuleSet([
+        dnsfilter.Rule("example.com", "block"),
+        dnsfilter.Rule("example.com", "allow"),
+    ])
+    check("tie on specificity -> allow wins", tie.decide("example.com")["action"] == "allowed")
+
+    print("\n-- web filtering: DNS packets --")
+    query = dnsfilter.build_query("ads.tracker.net")
+    check("question parsed", dnsfilter.parse_question_name(query) == "ads.tracker.net",
+          str(dnsfilter.parse_question_name(query)))
+    check("question end located", dnsfilter.question_end(query) == len(query))
+    check("truncated packet rejected", dnsfilter.parse_question_name(b"\x00\x01") is None)
+
+    import struct as _struct
+
+    nx = dnsfilter.make_error_response(query, dnsfilter.RCODE_NXDOMAIN)
+    check("nxdomain response built", len(nx) > 12)
+    check("response sets QR bit", (_struct.unpack("!H", nx[2:4])[0] & 0x8000) != 0)
+    check("response rcode is NXDOMAIN", (_struct.unpack("!H", nx[2:4])[0] & 0xF) == 3)
+    check("response echoes the question", dnsfilter.parse_question_name(nx) == "ads.tracker.net")
+    check("response keeps the query id", nx[0:2] == query[0:2])
+    check("response has no answers", _struct.unpack("!H", nx[6:8])[0] == 0)
+
+    print("\n-- web filtering: rules API --")
+    w1 = client.post("/api/web-rules", json={"pattern": "BlockedSite.com", "action": "block", "group_id": 0}, headers=headers)
+    check("global block rule created", w1.status_code == 200, str(w1.get_json()))
+    check("pattern normalised", w1.get_json()["rule"]["pattern"] == "blockedsite.com")
+    w2 = client.post("/api/web-rules", json={"pattern": "safe.blockedsite.com", "action": "allow", "group_id": 0}, headers=headers)
+    check("global allow rule created", w2.status_code == 200)
+    check("rule count reported", len(client.get("/api/web-rules").get_json()["rules"]) >= 2)
+    check("rejects empty pattern", client.post("/api/web-rules", json={"pattern": "  "}, headers=headers).status_code == 400)
+    check("rejects bad action", client.post("/api/web-rules", json={"pattern": "x.com", "action": "nuke"}, headers=headers).status_code == 400)
+
+    group_rule = client.post("/api/web-rules", json={"pattern": "games.example.com", "action": "block", "group_id": gid}, headers=headers)
+    check("group-scoped rule created", group_rule.status_code == 200)
+
+    proxy = dnsfilter.get_proxy()
+    proxy.set_rules(web_rules_as_objects())
+
+    # device 01 is in group `gid`, device 02 is ungrouped
+    d1 = proxy.decide("games.example.com", "192.168.1.10")
+    d2 = proxy.decide("games.example.com", "192.168.1.11")
+    check("group rule blocks its member", d1.action == "blocked", str(d1))
+    check("group rule spares non-members", d2.action == "allowed", str(d2))
+    check("global block applies to everyone", proxy.decide("blockedsite.com", "192.168.1.11").action == "blocked")
+    check("global allow overrides global block",
+          proxy.decide("safe.blockedsite.com", "192.168.1.11").action == "allowed")
+
+    print("\n-- web filtering: live proxy --")
+    check("proxy started on test port", proxy.is_running() or proxy.start(), "could not bind")
+    if proxy.is_running():
+        import socket as _socket
+
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as sock:
+            sock.settimeout(3)
+            sock.sendto(dnsfilter.build_query("blockedsite.com"), ("127.0.0.1", proxy.port))
+            reply, _ = sock.recvfrom(2048)
+        check("blocked query answered NXDOMAIN over the wire",
+              (_struct.unpack("!H", reply[2:4])[0] & 0xF) == 3, reply[:12].hex())
+        check("blocked query logged",
+              any(q["domain"] == "blockedsite.com" and q["action"] == "blocked"
+                  for q in client.get("/api/dns/queries?action=blocked").get_json()["queries"]))
+
+    check("dns status endpoint", client.get("/api/dns/status").status_code == 200)
+    check("dns query log endpoint", client.get("/api/dns/queries").status_code == 200)
+
+    print("\n-- web filtering: rule removal --")
+    rid = group_rule.get_json()["rule"]["id"]
+    check("rule deleted", client.delete(f"/api/web-rules/{rid}", headers=headers).status_code == 200)
+    proxy.set_rules(web_rules_as_objects())
+    check("group rule gone after delete", proxy.decide("games.example.com", "192.168.1.10").action == "allowed")
+
+    # ==================================================================
+    print("\n-- master pause (all devices) --")
+    check("pause-all accepted",
+          client.post("/api/pause-all", json={"minutes": 30, "label": "Dinner"}, headers=headers).status_code == 200)
+    result = engine.last_result()
+    check("pause-all blocks every device",
+          all(m in result["blocked"] for m in ("AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02")), str(result["blocked"]))
+    check("pause-all reason shown", "Dinner" in (result["reasons"].get("AA:BB:CC:DD:EE:01") or ""),
+          str(result["reasons"].get("AA:BB:CC:DD:EE:01")))
+    check("pause-all listed as a timer",
+          any(p["target_type"] == "all" for p in client.get("/api/pauses").get_json()["pauses"]))
+
+    check("resume-all accepted", client.post("/api/resume-all", json={}, headers=headers).status_code == 200)
+    check("resume-all clears the block",
+          "AA:BB:CC:DD:EE:02" not in engine.last_result()["blocked"], str(engine.last_result()["blocked"]))
+
+    check("pause-all without a timer stays until resumed",
+          client.post("/api/pause-all", json={}, headers=headers).status_code == 200
+          and "AA:BB:CC:DD:EE:02" in engine.last_result()["blocked"])
+    client.post("/api/resume-all", json={}, headers=headers)
+
+    # ==================================================================
+    print("\n-- unknown device quarantine --")
+    check("setting starts off", client.get("/api/settings").get_json()["auto_block_unknown"] is False)
+    check("enable auto-block",
+          client.patch("/api/settings", json={"auto_block_unknown": True}, headers=headers).status_code == 200
+          and client.get("/api/settings").get_json()["auto_block_unknown"] is True)
+
+    upsert_device("AA:BB:CC:DD:FF:99", ip="192.168.1.99", hostname="mystery")
+    result = engine.evaluate()
+    check("new device quarantined", "AA:BB:CC:DD:FF:99" in result["blocked"], str(result["blocked"]))
+    check("quarantine reason shown",
+          "waiting for approval" in (result["reasons"].get("AA:BB:CC:DD:FF:99") or ""),
+          str(result["reasons"].get("AA:BB:CC:DD:FF:99")))
+    check("unapproved listed",
+          any(d["mac"] == "AA:BB:CC:DD:FF:99"
+              for d in client.get("/api/devices/unapproved").get_json()["devices"]))
+
+    check("approve device",
+          client.post("/api/devices/AA:BB:CC:DD:FF:99/approve", json={"approved": True}, headers=headers).status_code == 200)
+    check("approved device released",
+          "AA:BB:CC:DD:FF:99" not in engine.evaluate()["blocked"])
+
+    upsert_device("AA:BB:CC:DD:FF:98", ip="192.168.1.98")
+    check("approve-all clears the queue",
+          client.post("/api/devices/approve-all", json={}, headers=headers).status_code == 200
+          and client.get("/api/devices/unapproved").get_json()["devices"] == [])
+
+    check("existing devices never quarantined", "AA:BB:CC:DD:EE:02" in [d["mac"] for d in client.get("/api/devices").get_json()["devices"]])
+    client.patch("/api/settings", json={"auto_block_unknown": False}, headers=headers)
 
     # ==================================================================
     print("\n-- system endpoints --")

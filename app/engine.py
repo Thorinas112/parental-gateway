@@ -37,6 +37,7 @@ from .utils import humanise_duration, now_dt, schedule_active, to_ts
 log = logging.getLogger("pg.engine")
 
 PRIORITY_MANUAL = 100
+PRIORITY_UNAPPROVED = 90
 PRIORITY_PAUSE = 80
 PRIORITY_ALLOW = 60
 PRIORITY_SCHEDULE = 40
@@ -95,33 +96,51 @@ def evaluate(when: datetime | None = None) -> dict[str, Any]:
                 f"Group “{group['name']}” is blocked",
             )
 
-    # --- 2. pause timers (temporary block) --------------------------------
+    # --- 2. unapproved devices -------------------------------------------
+    # When "block unknown devices" is on, a freshly discovered MAC stays
+    # quarantined until somebody explicitly approves it.
+    for device in devices:
+        if not device.get("approved", True):
+            decide(
+                device["mac"],
+                PRIORITY_UNAPPROVED,
+                True,
+                "New device - waiting for approval",
+            )
+
+    # --- 3. pause timers (temporary block) --------------------------------
     for pause in pauses:
         remaining = int(pause["expires_at"] - now_ts)
         if pause["kind"] != "block":
             continue
         label = pause.get("label") or "Paused"
-        reason = f"{label} · {humanise_duration(remaining)} left"
+        reason = f"{label} · {_countdown(remaining)}"
         if pause["target_type"] == "device":
             decide(pause["target_id"], PRIORITY_PAUSE, True, reason)
+        elif pause["target_type"] == "all":
+            for device in devices:
+                decide(device["mac"], PRIORITY_PAUSE, True, reason)
         else:
             for mac in group_macs(pause["target_id"]):
                 decide(mac, PRIORITY_PAUSE, True, reason)
 
-    # --- 3. allow timers (temporary override) ------------------------------
+    # --- 4. allow timers (temporary override) ------------------------------
     for pause in pauses:
         remaining = int(pause["expires_at"] - now_ts)
         if pause["kind"] != "allow":
             continue
         label = pause.get("label") or "Allowed"
-        reason = f"{label} · {humanise_duration(remaining)} left"
+        reason = f"{label} · {_countdown(remaining)}"
         if pause["target_type"] == "device":
             decide(pause["target_id"], PRIORITY_ALLOW, False, reason)
+        elif pause["target_type"] == "all":
+            for device in devices:
+                decide(device["mac"], PRIORITY_ALLOW, False, reason)
         else:
             for mac in group_macs(pause["target_id"]):
                 decide(mac, PRIORITY_ALLOW, False, reason)
 
-    # --- 4. weekly schedules ----------------------------------------------
+    # --- 5. weekly schedules ----------------------------------------------
     for schedule in schedules:
         if not schedule.get("enabled"):
             continue
@@ -209,6 +228,13 @@ def reconcile(force: bool = False, when: datetime | None = None) -> dict[str, An
 
 def last_result() -> dict[str, Any]:
     return dict(_last)
+
+
+def _countdown(remaining: int) -> str:
+    """Human label for how long a timer still has to run."""
+    if remaining > 30 * 86400:  # the "until resumed" sentinel
+        return "until resumed"
+    return f"{humanise_duration(remaining)} left"
 
 
 def enforce_settings() -> None:

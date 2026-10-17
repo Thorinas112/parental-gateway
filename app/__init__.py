@@ -102,8 +102,41 @@ def create_app(config_object=Config) -> Flask:
     except Exception:  # noqa: BLE001
         log.exception("gateway bootstrap failed")
 
+    # --- DNS filtering ---------------------------------------------------
+    if Config.DNS_ENABLED:
+        try:
+            from . import dnsfilter, firewall
+            from . import settings as runtime_settings
+            from .models import get_setting, web_rules_as_objects
+
+            proxy = dnsfilter.get_proxy()
+            proxy.set_rules(web_rules_as_objects())
+            if get_setting("dns_filtering", "1") == "1":
+                started = proxy.start()
+                if started and not firewall.dry_run():
+                    firewall.setup_dns_redirect(
+                        runtime_settings.lan_iface(), enabled=True, target_port=proxy.listen_port
+                    )
+                log.info("DNS filtering %s", "started" if started else "unavailable")
+        except Exception:  # noqa: BLE001
+            log.exception("DNS filter startup failed")
+
+    def _shutdown_dns() -> None:
+        if not Config.DNS_ENABLED:
+            return
+        try:
+            from . import dnsfilter, firewall
+            from . import settings as runtime_settings
+
+            proxy = dnsfilter.get_proxy()
+            firewall.setup_dns_redirect(runtime_settings.lan_iface(), enabled=False, target_port=proxy.listen_port)
+            proxy.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
     scheduler.start_scheduler()
     atexit.register(scheduler.stop_scheduler)
+    atexit.register(_shutdown_dns)
 
     log_event("Parental Gateway started", source="system")
     log.info(
