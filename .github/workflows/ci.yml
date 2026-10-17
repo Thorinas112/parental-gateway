@@ -44,7 +44,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ["20", "22"]
+        # jsdom 30 pulls in undici, which needs Node 22+
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
 
@@ -124,6 +125,9 @@ jobs:
         with:
           context: .
           push: false
+          # buildx builds in an isolated builder - `load` copies the result
+          # into the local daemon so the smoke test below can run it.
+          load: true
           tags: parental-gateway:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

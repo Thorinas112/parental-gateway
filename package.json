@@ -4,6 +4,9 @@
   "private": true,
   "description": "Frontend test harness for the Parental Gateway dashboard (Python app lives in app/).",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test:dom": "node scripts/dom_test.mjs",
     "test:py": "python scripts/smoke_test.py",
