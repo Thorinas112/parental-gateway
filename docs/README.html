@@ -372,7 +372,11 @@ body.docs-body {
 <ul>
 <li class="toc-l1"><a href="#parental-gateway">Parental Gateway</a><ul>
 <li class="toc-l2"><a href="#features">Features</a></li>
-<li class="toc-l2"><a href="#quick-start-docker">Quick start (Docker)</a></li>
+<li class="toc-l2"><a href="#quick-start">Quick start</a><ul>
+<li class="toc-l3"><a href="#option-a-pull-the-published-image-recommended">Option A — pull the published image (recommended)</a></li>
+<li class="toc-l3"><a href="#option-b-build-from-source">Option B — build from source</a></li>
+</ul>
+</li>
 <li class="toc-l2"><a href="#reading-the-documentation">Reading the documentation</a></li>
 <li class="toc-l2"><a href="#configuration">Configuration</a></li>
 <li class="toc-l2"><a href="#first-run-setup-wizard">First-run setup wizard</a></li>
@@ -387,6 +391,7 @@ body.docs-body {
 <li class="toc-l2"><a href="#security-notes">Security notes</a></li>
 <li class="toc-l2"><a href="#troubleshooting">Troubleshooting</a></li>
 <li class="toc-l2"><a href="#licence">Licence</a></li>
+<li class="toc-l2"><a href="#releases">Releases</a></li>
 </ul>
 </li>
 </ul>
@@ -395,6 +400,10 @@ body.docs-body {
   </aside>
   <article class="docs-content">
 <h1 id="parental-gateway">Parental Gateway</h1>
+<p><a href="https://github.com/Thorinas112/parental-gateway/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Thorinas112/parental-gateway/actions/workflows/ci.yml/badge.svg" /></a><br />
+<a href="https://github.com/Thorinas112/parental-gateway/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Thorinas112/parental-gateway" /></a><br />
+<a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-MIT-blue.svg" /></a><br />
+<a href="#development"><img alt="Tests" src="https://img.shields.io/badge/tests-265%20passing-brightgreen.svg" /></a></p>
 <p>A self-hosted <strong>parental control &amp; network management</strong> appliance that runs in a<br />
 Linux container (Docker or LXC) and acts as your network <strong>gateway</strong>.</p>
 <p>It discovers every device on your LAN, lets you name and group them, and<br />
@@ -491,8 +500,23 @@ blocking, pause timers and weekly bedtime schedules.</p>
 </tbody>
 </table>
 <hr />
-<h2 id="quick-start-docker">Quick start (Docker)</h2>
-<pre><code class="language-bash">git clone &lt;this repo&gt; parental-gateway &amp;&amp; cd parental-gateway
+<h2 id="quick-start">Quick start</h2>
+<h3 id="option-a-pull-the-published-image-recommended">Option A — pull the published image (recommended)</h3>
+<p>Multi-arch (<code>linux/amd64</code>, <code>linux/arm64</code>) images are published to GHCR on every<br />
+release, so a Raspberry Pi deploys exactly the same way as a server.</p>
+<pre><code class="language-bash">mkdir parental-gateway &amp;&amp; cd parental-gateway
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+
+cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
+sed -i 's|build:|image: ghcr.io/thorinas112/parental-gateway:latest\n    # build:|' docker-compose.yml
+
+docker compose up -d
+xdg-open http://&lt;host-ip&gt;:8080
+</code></pre>
+<h3 id="option-b-build-from-source">Option B — build from source</h3>
+<pre><code class="language-bash">git clone https://github.com/Thorinas112/parental-gateway.git
+cd parental-gateway
 
 cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
 docker compose up -d --build
@@ -952,24 +976,30 @@ allow timer. The UI always shows <em>why</em> a device is blocked.</p>
 <hr />
 <h2 id="project-layout">Project layout</h2>
 <pre><code>parental-gateway/
+├── .github/workflows/         # CI + release/publish pipelines
 ├── Dockerfile                 # slim Python image + iptables/iproute2/scapy tooling
 ├── docker-compose.yml         # host networking + NET_ADMIN/NET_RAW
 ├── entrypoint.sh              # ip_forward, NAT bootstrap, interface config
 ├── requirements.txt
 ├── .env.example
+├── LICENSE                    # MIT
+├── CHANGELOG.md               # Keep a Changelog
+├── SECURITY.md                # policy, hardening checklist, limitations
 ├── app/
 │   ├── __init__.py            # Flask factory, bootstrap, waitress entry point
 │   ├── config.py              # env-driven configuration
-│   ├── db.py                  # SQLite schema + helpers
+│   ├── db.py                  # SQLite schema + migrations
 │   ├── security.py            # users, session tokens, CSRF, throttling
-│   ├── models.py              # devices / groups / pauses / schedules
+│   ├── models.py              # devices / groups / pauses / schedules / rules
 │   ├── settings.py            # runtime settings (DB over env)
 │   ├── docs.py                # Markdown -&gt; HTML documentation renderer
+│   ├── dnsfilter.py           # domain matching + DNS proxy
 │   ├── scanner.py             # scapy ARP + `ip neigh` discovery
+│   ├── usage.py               # byte counters -&gt; SQLite -&gt; aggregates
 │   ├── firewall.py            # iptables PCTRL chain management
 │   ├── gateway.py             # IP forwarding, NAT, interface state
 │   ├── engine.py              # policy evaluation &amp; reconciliation
-│   ├── scheduler.py           # background reconcile + scan loop
+│   ├── scheduler.py           # background reconcile + scan + sample loop
 │   ├── routes/                # web + JSON API blueprints
 │   ├── templates/             # setup.html, login.html, dashboard.html
 │   └── static/                # css/app.css, css/docs.css, js/app.js
@@ -1003,13 +1033,20 @@ computes everything and the UI shows exactly which rules <em>would</em> be insta
 but the kernel is never touched. Useful for testing on a laptop.</p>
 <hr />
 <h2 id="security-notes">Security notes</h2>
+<p>See <strong><a href="SECURITY.md">SECURITY.md</a></strong> for the full policy, supported versions and<br />
+the system's known limitations.</p>
+<p><strong>Before the UI is reachable by anyone else:</strong></p>
 <ul>
-<li><strong>No default password exists.</strong> The install starts with zero accounts and the<br />
-  first-run wizard creates the administrator. Complete the wizard <em>before</em><br />
-  exposing the UI to your network — while it is pending, whoever reaches<br />
-<code>/setup</code> first claims the account.</li>
-<li>Use a long random <code>SECRET_KEY</code> in production so sessions survive container<br />
-  rebuilds; otherwise one is generated and persisted in <code>data/secret.key</code>.* Cookies are <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> when<br />
+<li>[ ] Complete the <strong>setup wizard</strong> — while it is pending, whoever reaches<br />
+<code>/setup</code> first claims the administrator account. No default password exists.</li>
+<li>[ ] Use a long random <code>SECRET_KEY</code> so sessions survive container rebuilds;<br />
+      otherwise one is generated and persisted in <code>data/secret.key</code>.</li>
+<li>[ ] Set <code>SESSION_COOKIE_SECURE=1</code> if you front the UI with TLS.</li>
+<li>[ ] Restrict port 8080 to your LAN subnet at the firewall.</li>
+<li>[ ] Keep <code>./data</code> backed up and not world-readable — it holds the database<br />
+      (device MACs, hostnames, schedules) and the session signing key.</li>
+<li>[ ] Keep the host patched and rebuild the image regularly.</li>
+<li>[ ] Tell your family the network is filtered.* Cookies are <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> when<br />
 <code>SESSION_COOKIE_SECURE=1</code> (set this if you terminate TLS in front).</li>
 <li>Mutating API calls require a per-session CSRF token.</li>
 <li>Logins are throttled per client IP (8 attempts / 5 minutes by default).</li>
@@ -1056,7 +1093,36 @@ but the kernel is never touched. Useful for testing on a laptop.</p>
 </table>
 <hr />
 <h2 id="licence">Licence</h2>
-<p>MIT — use it, modify it, ship it.</p>
+<p><a href="LICENSE">MIT</a> — use it, modify it, ship it.</p>
+<h2 id="releases">Releases</h2>
+<p>Every tag matching <code>v*</code> runs the full test suite, builds a multi-arch image and<br />
+publishes it to GHCR, then opens a GitHub Release with notes pulled from<br />
+<a href="CHANGELOG.md">CHANGELOG.md</a>.</p>
+<pre><code class="language-bash"># cutting a release is one command
+git tag v1.1.0 &amp;&amp; git push origin v1.1.0
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Images</strong></td>
+<td><code>ghcr.io/thorinas112/parental-gateway</code> (<code>linux/amd64</code>, <code>linux/arm64</code>)</td>
+</tr>
+<tr>
+<td><strong>Tags</strong></td>
+<td><code>latest</code>, <code>1.1.0</code>, <code>1.1</code></td>
+</tr>
+<tr>
+<td><strong>Changelog</strong></td>
+<td><a href="CHANGELOG.md">CHANGELOG.md</a></td>
+</tr>
+</tbody>
+</table>
   </article>
 </div>
 

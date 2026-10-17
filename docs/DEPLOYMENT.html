@@ -476,9 +476,17 @@ computed and shown, but never applied.</p>
 <hr />
 <h2 id="3-docker-deployment">3. Docker deployment</h2>
 <h3 id="31-get-the-files">3.1 Get the files</h3>
+<p><strong>Using the published image</strong> (no build step, multi-arch so it works on a Pi):</p>
 <pre><code class="language-bash">mkdir -p /opt/parental-gateway &amp;&amp; cd /opt/parental-gateway
-# copy the project files here, or:
-# git clone &lt;repo&gt; ./
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+</code></pre>
+<p>Then in <code>docker-compose.yml</code> replace the <code>build:</code> block with:</p>
+<pre><code class="language-yaml">    image: ghcr.io/thorinas112/parental-gateway:latest
+</code></pre>
+<p><strong>Or building from source:</strong></p>
+<pre><code class="language-bash">git clone https://github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
+cd /opt/parental-gateway
 </code></pre>
 <h3 id="32-configure">3.2 Configure</h3>
 <pre><code class="language-bash">cp .env.example .env

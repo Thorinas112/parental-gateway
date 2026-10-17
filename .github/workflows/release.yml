@@ -1,0 +1,138 @@
+name: Release
+
+# Publishes a multi-arch Docker image to GHCR and creates a GitHub Release
+# whenever a version tag (v1.2.3) is pushed.
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm ci
+
+      - name: Run both test suites
+        run: |
+          python scripts/smoke_test.py
+          node scripts/dom_test.mjs
+
+      - name: Build the standalone docs
+        run: python scripts/build_docs.py
+
+  publish:
+    name: Publish image + release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR rejects uppercase image names, and github.repository preserves
+      # the account's casing - so normalise it explicitly.
+      - name: Compute image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ github.ref_name }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          tag = os.environ["VERSION"]
+          version = tag.lstrip("v")
+          image = os.environ["IMAGE"]
+
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+              text,
+              re.MULTILINE | re.DOTALL,
+          )
+          notes = match.group(1).strip() if match else "See CHANGELOG.md for details."
+          notes += (
+              "\n\n---\n\n## Install\n\n"
+              f"```\ndocker pull {image}:{version}\ndocker pull {image}:latest\n```\n\n"
+              "See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full walkthrough.\n"
+          )
+          pathlib.Path("RELEASE_NOTES.md").write_text(notes, encoding="utf-8")
+          print(notes[:600])
+          PY
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXTRA=""
+          case "$GITHUB_REF_NAME" in
+            *-*) ;;                 # pre-release tags like v1.0.0-rc1
+            *)   EXTRA="--latest" ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            $EXTRA

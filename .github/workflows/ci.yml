@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Byte-compile sources
+        run: python -m compileall -q app scripts
+
+      - name: Run backend test suite
+        run: python scripts/smoke_test.py
+
+  frontend:
+    name: Frontend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: |
+          node --check app/static/js/app.js
+          node --check app/static/js/chart.js
+
+      - name: Run frontend test suite
+        run: node scripts/dom_test.mjs
+
+  docs:
+    name: Documentation builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Render standalone docs
+        run: python scripts/build_docs.py
+
+      - name: Check every TOC anchor resolves
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          sys.path.insert(0, ".")
+          from app.docs import render_markdown, PAGES, ROOT
+
+          broken = 0
+          for slug, meta in PAGES.items():
+              source = ROOT / meta["file"]
+              if not source.exists():
+                  print(f"MISSING {meta['file']}")
+                  broken += 1
+                  continue
+              body, toc = render_markdown(source.read_text(encoding="utf-8"))
+              ids = set(re.findall(r'<h[1-6][^>]*id="([^"]+)"', body))
+              links = set(re.findall(r'<a href="#([^"]+)"', toc))
+              missing = sorted(links - ids)
+              print(f"{meta['file']}: {len(ids)} headings, {len(links)} links, {len(missing)} broken")
+              broken += len(missing)
+          sys.exit(1 if broken else 0)
+          PY
+
+      - name: Upload rendered docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/*.html
+          if-no-files-found: error
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: parental-gateway:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the built image
+        run: |
+          docker run -d --name smoke \
+            -e GATEWAY_MODE=0 -e FIREWALL_MODE=off \
+            -e ADMIN_USERNAME=admin -e ADMIN_PASSWORD=ci-smoke-password-123 \
+            -e WEB_PORT=8080 -e DNS_ENABLED=0 -e USAGE_ENABLED=0 \
+            -e SCAN_INTERVAL_MINUTES=0 \
+            parental-gateway:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+              echo "container healthy"
+              curl -fsS http://127.0.0.1:8080/docs/how-it-works >/dev/null
+              echo "docs served"
+              docker logs smoke 2>&1 | tail -5
+              docker rm -f smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "container never became healthy"
+          docker logs smoke 2>&1 | tail -30
+          docker rm -f smoke
+          exit 1
+
+  lint:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash syntax check
+        run: |
+          for f in entrypoint.sh scripts/setup-gateway.sh; do
+            echo "checking $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning entrypoint.sh scripts/setup-gateway.sh || true

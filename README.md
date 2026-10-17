@@ -1,5 +1,10 @@
 # Parental Gateway
 
+[![CI](https://github.com/Thorinas112/parental-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Thorinas112/parental-gateway/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Thorinas112/parental-gateway)](https://github.com/Thorinas112/parental-gateway/releases)
+[![Licence](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-265%20passing-brightgreen.svg)](#development)
+
 A self-hosted **parental control & network management** appliance that runs in a
 Linux container (Docker or LXC) and acts as your network **gateway**.
 
@@ -48,10 +53,30 @@ blocking, pause timers and weekly bedtime schedules.
 
 ---
 
-## Quick start (Docker)
+## Quick start
+
+### Option A — pull the published image (recommended)
+
+Multi-arch (`linux/amd64`, `linux/arm64`) images are published to GHCR on every
+release, so a Raspberry Pi deploys exactly the same way as a server.
 
 ```bash
-git clone <this repo> parental-gateway && cd parental-gateway
+mkdir parental-gateway && cd parental-gateway
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+
+cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
+sed -i 's|build:|image: ghcr.io/thorinas112/parental-gateway:latest\n    # build:|' docker-compose.yml
+
+docker compose up -d
+xdg-open http://<host-ip>:8080
+```
+
+### Option B — build from source
+
+```bash
+git clone https://github.com/Thorinas112/parental-gateway.git
+cd parental-gateway
 
 cp .env.example .env          # then edit LAN_IFACE / WAN_IFACE
 docker compose up -d --build
@@ -264,24 +289,30 @@ All endpoints are JSON and live under `/api`. Authentication uses the
 
 ```
 parental-gateway/
+├── .github/workflows/         # CI + release/publish pipelines
 ├── Dockerfile                 # slim Python image + iptables/iproute2/scapy tooling
 ├── docker-compose.yml         # host networking + NET_ADMIN/NET_RAW
 ├── entrypoint.sh              # ip_forward, NAT bootstrap, interface config
 ├── requirements.txt
 ├── .env.example
+├── LICENSE                    # MIT
+├── CHANGELOG.md               # Keep a Changelog
+├── SECURITY.md                # policy, hardening checklist, limitations
 ├── app/
 │   ├── __init__.py            # Flask factory, bootstrap, waitress entry point
 │   ├── config.py              # env-driven configuration
-│   ├── db.py                  # SQLite schema + helpers
+│   ├── db.py                  # SQLite schema + migrations
 │   ├── security.py            # users, session tokens, CSRF, throttling
-│   ├── models.py              # devices / groups / pauses / schedules
+│   ├── models.py              # devices / groups / pauses / schedules / rules
 │   ├── settings.py            # runtime settings (DB over env)
 │   ├── docs.py                # Markdown -> HTML documentation renderer
+│   ├── dnsfilter.py           # domain matching + DNS proxy
 │   ├── scanner.py             # scapy ARP + `ip neigh` discovery
+│   ├── usage.py               # byte counters -> SQLite -> aggregates
 │   ├── firewall.py            # iptables PCTRL chain management
 │   ├── gateway.py             # IP forwarding, NAT, interface state
 │   ├── engine.py              # policy evaluation & reconciliation
-│   ├── scheduler.py           # background reconcile + scan loop
+│   ├── scheduler.py           # background reconcile + scan + sample loop
 │   ├── routes/                # web + JSON API blueprints
 │   ├── templates/             # setup.html, login.html, dashboard.html
 │   └── static/                # css/app.css, css/docs.css, js/app.js
@@ -323,12 +354,21 @@ but the kernel is never touched. Useful for testing on a laptop.
 
 ## Security notes
 
-* **No default password exists.** The install starts with zero accounts and the
-  first-run wizard creates the administrator. Complete the wizard *before*
-  exposing the UI to your network — while it is pending, whoever reaches
-  `/setup` first claims the account.
-* Use a long random `SECRET_KEY` in production so sessions survive container
-  rebuilds; otherwise one is generated and persisted in `data/secret.key`.* Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` when
+See **[SECURITY.md](SECURITY.md)** for the full policy, supported versions and
+the system's known limitations.
+
+**Before the UI is reachable by anyone else:**
+
+- [ ] Complete the **setup wizard** — while it is pending, whoever reaches
+      `/setup` first claims the administrator account. No default password exists.
+- [ ] Use a long random `SECRET_KEY` so sessions survive container rebuilds;
+      otherwise one is generated and persisted in `data/secret.key`.
+- [ ] Set `SESSION_COOKIE_SECURE=1` if you front the UI with TLS.
+- [ ] Restrict port 8080 to your LAN subnet at the firewall.
+- [ ] Keep `./data` backed up and not world-readable — it holds the database
+      (device MACs, hostnames, schedules) and the session signing key.
+- [ ] Keep the host patched and rebuild the image regularly.
+- [ ] Tell your family the network is filtered.* Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` when
   `SESSION_COOKIE_SECURE=1` (set this if you terminate TLS in front).
 * Mutating API calls require a per-session CSRF token.
 * Logins are throttled per client IP (8 attempts / 5 minutes by default).
@@ -354,4 +394,21 @@ but the kernel is never touched. Useful for testing on a laptop.
 
 ## Licence
 
-MIT — use it, modify it, ship it.
+[MIT](LICENSE) — use it, modify it, ship it.
+
+## Releases
+
+Every tag matching `v*` runs the full test suite, builds a multi-arch image and
+publishes it to GHCR, then opens a GitHub Release with notes pulled from
+[CHANGELOG.md](CHANGELOG.md).
+
+```bash
+# cutting a release is one command
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+| | |
+|---|---|
+| **Images** | `ghcr.io/thorinas112/parental-gateway` (`linux/amd64`, `linux/arm64`) |
+| **Tags** | `latest`, `1.1.0`, `1.1` |
+| **Changelog** | [CHANGELOG.md](CHANGELOG.md) |

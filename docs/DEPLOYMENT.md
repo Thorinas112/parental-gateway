@@ -68,10 +68,25 @@ computed and shown, but never applied.
 
 ### 3.1 Get the files
 
+**Using the published image** (no build step, multi-arch so it works on a Pi):
+
 ```bash
 mkdir -p /opt/parental-gateway && cd /opt/parental-gateway
-# copy the project files here, or:
-# git clone <repo> ./
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/docker-compose.yml
+curl -fsSO https://raw.githubusercontent.com/Thorinas112/parental-gateway/main/.env.example
+```
+
+Then in `docker-compose.yml` replace the `build:` block with:
+
+```yaml
+    image: ghcr.io/thorinas112/parental-gateway:latest
+```
+
+**Or building from source:**
+
+```bash
+git clone https://github.com/Thorinas112/parental-gateway.git /opt/parental-gateway
+cd /opt/parental-gateway
 ```
 
 ### 3.2 Configure
