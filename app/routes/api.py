@@ -28,6 +28,7 @@ from ..models import (
     delete_schedule,
     delete_web_rule,
     dns_query_stats,
+    dns_source_stats,
     get_device,
     get_group,
     get_schedule,
@@ -909,6 +910,8 @@ def dns_status():
             "rule_count": len(rules),
             "block_rules": sum(1 for r in rules if r["action"] == "block" and r["enabled"]),
             "allow_rules": sum(1 for r in rules if r["action"] == "allow" and r["enabled"]),
+            "sources": dns_source_stats(),
+            "device_blocking_available": not dns_source_stats().get("suspected_relay", False),
             "dry_run": firewall.dry_run(),
         }
     )

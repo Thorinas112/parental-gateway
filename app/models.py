@@ -503,6 +503,42 @@ def dns_query_stats() -> dict[str, Any]:
     }
 
 
+def dns_source_stats(window_seconds: int = 3600) -> dict[str, Any]:
+    """Where our DNS queries are actually coming from.
+
+    If nearly everything arrives from one address, that address is almost
+    certainly a router relaying on behalf of its clients. In that case we
+    cannot tell which device asked, so per-device DNS enforcement has no
+    effect - worth surfacing rather than leaving as a silent no-op.
+    """
+    sources = rows(
+        "SELECT ip, COUNT(*) AS n FROM dns_queries WHERE ts >= ? "
+        "GROUP BY ip ORDER BY n DESC LIMIT 8",
+        (to_ts() - int(window_seconds),),
+    )
+    total = sum(int(r["n"]) for r in sources)
+    if not total:
+        return {
+            "suspected_relay": False,
+            "distinct_sources": 0,
+            "total": 0,
+            "top_ip": None,
+            "top_share": 0.0,
+        }
+
+    top = sources[0]
+    share = int(top["n"]) / total
+    return {
+        # One source dominating, with almost nothing else, is a relay.
+        "suspected_relay": share >= 0.85 and len(sources) <= 2,
+        "distinct_sources": len(sources),
+        "total": total,
+        "top_ip": top["ip"],
+        "top_share": round(share, 3),
+        "sources": sources,
+    }
+
+
 def prune_dns_queries(days: int = 7) -> int:
     cutoff = to_ts() - max(1, int(days)) * 86400
     with db() as conn:

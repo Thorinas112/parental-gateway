@@ -838,6 +838,16 @@ select { cursor: pointer; }
   gap: 12px;
   padding: 15px 17px 4px;
 }
+#relay-warning { margin: 15px 17px 0; }
+.notice-warn {
+  background: rgba(251, 146, 60, .12);
+  border-color: rgba(251, 146, 60, .34);
+  color: #fdba74;
+}
+.notice-warn code {
+  background: rgba(0, 0, 0, .28);
+  color: #fed7aa;
+}
 .filter-grid {
   display: grid;
   grid-template-columns: 1.15fr 1fr;

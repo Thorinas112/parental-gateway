@@ -31,8 +31,9 @@ os.environ.setdefault("USAGE_INTERVAL_SECONDS", "3600")
 from app import create_app  # noqa: E402
 from app import engine  # noqa: E402
 from app import settings as runtime_settings  # noqa: E402
-from app.db import init_db  # noqa: E402
-from app.models import upsert_device, web_rules_as_objects  # noqa: E402
+from app.db import execute as db_execute, init_db  # noqa: E402
+from app.models import dns_source_stats, upsert_device, web_rules_as_objects  # noqa: E402
+from app.utils import to_ts as _now  # noqa: E402
 
 PASS, FAIL = 0, 0
 CREDS = {"username": "admin", "password": "test-password-123"}
@@ -480,6 +481,35 @@ def main() -> int:
         client.delete(f"/api/pauses/{p['id']}", headers=headers)
     clear_block_cache()
     check("clearing timers releases DNS", proxy.device_is_blocked("192.168.1.11") is False)
+
+    # ==================================================================
+    print("\n-- DNS relay detection --")
+    db_execute("DELETE FROM dns_queries")
+    for _ in range(10):
+        db_execute(
+            "INSERT INTO dns_queries (ts, mac, ip, domain, action, reason) VALUES (?,?,?,?,?,?)",
+            (_now(), "74:12:13:4E:60:74", "192.168.1.1", "example.com", "allowed", "no matching rule"),
+        )
+    stats = dns_source_stats()
+    check("relay suspected when one source dominates",
+          stats["suspected_relay"] is True and stats["top_ip"] == "192.168.1.1", str(stats))
+    check("relay share computed", stats["top_share"] > 0.9, str(stats["top_share"]))
+
+    db_execute("DELETE FROM dns_queries")
+    for i in range(5):
+        db_execute(
+            "INSERT INTO dns_queries (ts, mac, ip, domain, action, reason) VALUES (?,?,?,?,?,?)",
+            (_now(), f"AA:BB:CC:DD:EE:0{i}", f"192.168.1.10{i}", "example.com", "allowed", "no matching rule"),
+        )
+    stats = dns_source_stats()
+    check("direct clients are not flagged as a relay",
+          stats["suspected_relay"] is False and stats["distinct_sources"] == 5, str(stats))
+
+    db_execute("DELETE FROM dns_queries")
+    check("no queries -> not a relay", dns_source_stats()["suspected_relay"] is False)
+
+    check("status endpoint reports relay state",
+          "sources" in client.get("/api/dns/status").get_json())
 
     # ==================================================================
     print("\n-- system endpoints --")

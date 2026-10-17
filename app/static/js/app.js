@@ -527,7 +527,10 @@ function renderFilter() {
   const stats = (state.dnsQueries && state.dnsQueries.stats) || {};
 
   const pill = $('#dns-pill');
-  if (dns.running && dns.interceptable) {
+  const sources = dns.sources || {};
+  const relayed = !!sources.suspected_relay;
+
+  if (dns.running && dns.interceptable && !relayed) {
     pill.innerHTML = '<span class="dot dot-ok"></span>DNS filtering on';
     pill.title = 'Listening on ' + (dns.bound_to || []).join(':') + ' · upstream ' + (dns.upstreams || []).join(', ');
     $('#dns-toggle').textContent = 'Stop DNS filter';
@@ -544,6 +547,24 @@ function renderFilter() {
     pill.title = 'Rules are stored but nothing is being filtered';
     $('#dns-toggle').textContent = 'Start DNS filter';
     $('#dns-toggle').classList.add('btn-primary');
+  }
+
+  // Warn when DNS is being relayed by a router: we see the router, not the
+  // client, so per-device enforcement cannot identify who is asking.
+  const relayBox = $('#relay-warning');
+  if (relayBox) {
+    if (relayed) {
+      relayBox.hidden = false;
+      $('#relay-warning-text').innerHTML =
+        '<strong>DNS is being relayed through ' + esc(sources.top_ip || 'another device') + '</strong> — ' +
+        esc(Math.round((sources.top_share || 0) * 100)) + '% of queries arrive from that one address, ' +
+        'so the gateway cannot tell which device is asking. ' +
+        '<strong>Website filtering still works</strong>, but per-device Pause/Block at DNS level will not. ' +
+        'To fix it, clients must query this box directly — move DHCP here (see the Deployment Guide) ' +
+        'or set DNS manually to <code>' + esc((dns.bound_to || ['<gateway>'])[0]) + '</code> on the device.';
+    } else {
+      relayBox.hidden = true;
+    }
   }
 
   $('#filter-stats').innerHTML = [
