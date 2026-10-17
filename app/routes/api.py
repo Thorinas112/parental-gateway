@@ -968,6 +968,7 @@ def _settings_payload() -> dict[str, Any]:
     return {
         "auto_block_unknown": get_setting("auto_block_unknown", "0") == "1",
         "dns_filtering": get_setting("dns_filtering", "1") == "1",
+        "dns_enforces_blocks": get_setting("dns_enforces_blocks", "1") == "1",
         "min_password_length": Config.MIN_PASSWORD_LENGTH,
         "usage_enabled": Config.USAGE_ENABLED,
     }
@@ -979,6 +980,8 @@ def settings_patch():
     body = _body()
     if "auto_block_unknown" in body:
         set_setting("auto_block_unknown", "1" if body["auto_block_unknown"] else "0")
+    if "dns_enforces_blocks" in body:
+        set_setting("dns_enforces_blocks", "1" if body["dns_enforces_blocks"] else "0")
     if "dns_filtering" in body:
         enabled = bool(body["dns_filtering"])
         set_setting("dns_filtering", "1" if enabled else "0")

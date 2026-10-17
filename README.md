@@ -44,6 +44,7 @@ blocking, pause timers and weekly bedtime schedules.
 | **Timers** | **Pause internet** for 15 min / 30 min / 1 h / 2 h / 4 h / overnight, plus an *Allow* override |
 | **Schedules** | Recurring weekly windows (e.g. block *Kids* Mon–Fri 21:00 → 07:00) including midnight-crossing ranges |
 | **Website filtering** | Per-group domain block/allow rules, a DNS proxy that answers NXDOMAIN, and a bypass-proof port-53 intercept |
+| **DNS-level device blocking** | Paused or blocked devices stop resolving names — so Pause/Block works even when client traffic doesn't route through the box, as long as DNS does |
 | **Traffic usage** | Per-device and per-group bandwidth graphs with hourly/daily rollups kept long term |
 | **Unknown device quarantine** | Any new MAC can be held offline until you approve it |
 | **Gateway mode** | IP forwarding + NAT (MASQUERADE) so the container actually routes client traffic |

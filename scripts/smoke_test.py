@@ -434,6 +434,54 @@ def main() -> int:
     client.patch("/api/settings", json={"auto_block_unknown": False}, headers=headers)
 
     # ==================================================================
+    print("\n-- DNS-level device blocking --")
+    proxy = dnsfilter.get_proxy()
+
+    def clear_block_cache():
+        proxy._block_cache.clear()
+
+    check("enforcement setting defaults on",
+          client.get("/api/settings").get_json()["dns_enforces_blocks"] is True)
+
+    client.post("/api/devices/AA:BB:CC:DD:EE:02/access", json={"blocked": True}, headers=headers)
+    engine.reconcile(force=True)
+    clear_block_cache()
+    check("proxy sees the device as blocked", proxy.device_is_blocked("192.168.1.11") is True,
+          str(proxy.device_is_blocked("192.168.1.11")))
+
+    resp = proxy.handle_query(dnsfilter.build_query("anything.example"), "192.168.1.11")
+    rcode = _struct.unpack("!H", resp[2:4])[0] & 0xF
+    check("blocked device gets NXDOMAIN", rcode == 3, f"rcode={rcode}")
+    check("refusal counted",
+          proxy.stats.get("device_blocked", 0) > 0, str(proxy.stats))
+
+    clear_block_cache()
+    check("unknown client is not refused", proxy.device_is_blocked("192.168.1.250") is False)
+
+    client.patch("/api/settings", json={"dns_enforces_blocks": False}, headers=headers)
+    clear_block_cache()
+    check("enforcement can be switched off", proxy.device_is_blocked("192.168.1.11") is False)
+
+    client.patch("/api/settings", json={"dns_enforces_blocks": True}, headers=headers)
+    clear_block_cache()
+    check("enforcement re-enabled", proxy.device_is_blocked("192.168.1.11") is True)
+
+    client.post("/api/devices/AA:BB:CC:DD:EE:02/access", json={"blocked": False}, headers=headers)
+    engine.reconcile(force=True)
+    clear_block_cache()
+    check("unblocking releases DNS", proxy.device_is_blocked("192.168.1.11") is False)
+
+    # a pause timer must also cut DNS
+    client.post("/api/devices/AA:BB:CC:DD:EE:02/timer", json={"minutes": 15, "kind": "block"}, headers=headers)
+    clear_block_cache()
+    check("pause timer also cuts DNS", proxy.device_is_blocked("192.168.1.11") is True)
+    client.post("/api/resume-all", json={}, headers=headers)
+    for p in client.get("/api/pauses").get_json()["pauses"]:
+        client.delete(f"/api/pauses/{p['id']}", headers=headers)
+    clear_block_cache()
+    check("clearing timers releases DNS", proxy.device_is_blocked("192.168.1.11") is False)
+
+    # ==================================================================
     print("\n-- system endpoints --")
     check("status", client.get("/api/status").status_code == 200)
     check("rules dump", client.get("/api/rules").status_code == 200)

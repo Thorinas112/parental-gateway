@@ -49,6 +49,9 @@ RCODE_REFUSED = 5
 # the database changes.
 _RULES_TTL = 5.0
 _MAC_TTL = 30.0
+# Block state must track the policy engine closely, so it is re-read often.
+# It is cheap: one cached lookup plus an in-memory decision table.
+_BLOCK_TTL = 2.0
 _LOG_PRUNE_EVERY = 200
 
 
@@ -268,10 +271,18 @@ class DnsProxy:
 
         self._mac_lock = threading.Lock()
         self._mac_cache: dict[str, tuple[float, Any]] = {}
+        self._block_cache: dict[str, tuple[float, bool]] = {}
 
         self._log_counter = 0
         self.bound_to: tuple[str, int] | None = None
-        self.stats = {"queries": 0, "blocked": 0, "allowed": 0, "errors": 0, "started_at": 0}
+        self.stats = {
+            "queries": 0,
+            "blocked": 0,
+            "allowed": 0,
+            "errors": 0,
+            "device_blocked": 0,
+            "started_at": 0,
+        }
 
     # ---------------------------------------------------------------- setup
     def set_rules(self, rules: Iterable[Rule]) -> None:
@@ -339,6 +350,39 @@ class DnsProxy:
     def lookup_mac(self, ip: str) -> str | None:
         return self.device_info(ip)[0]
 
+    def device_is_blocked(self, ip: str | None) -> bool:
+        """True when the policy engine has this client offline.
+
+        Used to make Pause / Block effective on networks where client traffic
+        does not route through the gateway but DNS does - refused names mean
+        the device cannot reach anything by hostname.
+        """
+        if not ip:
+            return False
+
+        now = time.time()
+        with self._mac_lock:
+            hit = self._block_cache.get(ip)
+            if hit and now - hit[0] < _BLOCK_TTL:
+                return hit[1]
+
+        blocked = False
+        try:
+            from .models import get_setting
+
+            enabled = get_setting("dns_enforces_blocks", "1") == "1"
+            if enabled:
+                from . import engine
+
+                mac, _group_id = self.device_info(ip)
+                blocked = bool(mac) and engine.is_blocked(mac)
+        except Exception:  # noqa: BLE001
+            log.debug("block lookup failed for %s", ip, exc_info=True)
+
+        with self._mac_lock:
+            self._block_cache[ip] = (now, blocked)
+        return blocked
+
     def decide(self, domain: str, client_ip: str | None = None) -> DnsDecision:
         mac, group_id = self.device_info(client_ip) if client_ip else (None, 0)
         result = self.ruleset_for(group_id).decide(domain)
@@ -359,6 +403,23 @@ class DnsProxy:
             self.stats["errors"] += 1
             return make_error_response(payload, RCODE_SERVFAIL)
 
+        # A device the policy engine has blocked resolves nothing at all. This
+        # makes Pause / Block effective even when client traffic does not route
+        # through the gateway, as long as DNS does.
+        if self.device_is_blocked(client_ip):
+            self.stats["device_blocked"] += 1
+            self._record(
+                DnsDecision(
+                    action="blocked",
+                    reason="device is paused or blocked",
+                    domain=domain,
+                    pattern=None,
+                ),
+                client_ip,
+                sample_only=True,
+            )
+            return make_error_response(payload, RCODE_NXDOMAIN)
+
         decision = self.decide(domain, client_ip)
         if decision.action == "blocked":
             self.stats["blocked"] += 1
@@ -366,7 +427,7 @@ class DnsProxy:
             return make_error_response(payload, RCODE_NXDOMAIN)
 
         self.stats["allowed"] += 1
-        self._record(decision, client_ip)
+        self._record(decision, client_ip, sample_only=True)
         return self._forward(payload) or make_error_response(payload, RCODE_SERVFAIL)
 
     def _forward(self, payload: bytes) -> bytes | None:
@@ -382,13 +443,13 @@ class DnsProxy:
         self.stats["errors"] += 1
         return None
 
-    def _record(self, decision: DnsDecision, client_ip: str | None) -> None:
+    def _record(self, decision: DnsDecision, client_ip: str | None, sample_only: bool = False) -> None:
         self._log_counter += 1
         if self._log_counter % _LOG_PRUNE_EVERY == 0:
             self._prune()
-        # Don't log every allowed query - the interesting ones are the blocks
-        # plus a sampled view of what devices look up.
-        if decision.action == "allowed" and self._log_counter % 25 != 0:
+        # Blocks are always interesting; everything else is sampled so the log
+        # stays readable and the table stays small.
+        if sample_only and self._log_counter % 25 != 0:
             return
         try:
             from .db import execute

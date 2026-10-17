@@ -117,6 +117,10 @@ class Config:
     DNS_ENABLED = _bool(os.environ.get("DNS_ENABLED"), True)
     DNS_PORT = _int(os.environ.get("DNS_PORT"), 53)
     DNS_TIMEOUT = float(os.environ.get("DNS_TIMEOUT") or 3.0)
+    # Refuse to resolve for devices the policy engine has blocked. This makes
+    # Pause / Block work even on networks where client traffic does not route
+    # through the gateway but DNS does.
+    DNS_ENFORCES_BLOCKS = _bool(os.environ.get("DNS_ENFORCES_BLOCKS"), True)
     DNS_UPSTREAMS = tuple(
         s.strip()
         for s in (os.environ.get("DNS_UPSTREAMS") or "1.1.1.1,8.8.8.8,9.9.9.9").split(",")

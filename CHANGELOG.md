@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Block devices at DNS level.** A paused or blocked device now stops
+  resolving names entirely (`NXDOMAIN`), which makes Pause / Block effective
+  even when client traffic does not route through the gateway but DNS does —
+  the common situation with ISP routers that expose no DHCP gateway option.
+  Controlled by the *Block devices at DNS level* setting (on by default), and
+  counted separately in the DNS statistics.
 - `scripts/setup-host.sh` — prepares a host for deployment: installs the Docker
   Compose V2 and buildx plugins when the distribution's Docker package omitted
   them (as Ubuntu's `docker.io` does), adds the current user to the `docker`
@@ -16,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--deploy`. Addresses the exact failures seen deploying to a fresh Ubuntu
   box: `docker: unknown command: docker compose`, the legacy-builder
   deprecation, and `permission denied` on `/var/run/docker.sock`.
+- `scripts/diagnose.sh` — answers "why isn't my block working?" by walking
+  every layer from the dashboard button to the wire: container, IP forwarding,
+  firewall mode, installed rules, whether client traffic is actually transiting
+  the box (read from the accounting counters), DNS interception, and the
+  specific device's MAC/block state.
 
 ## [1.0.1] - 2026-10-17
 

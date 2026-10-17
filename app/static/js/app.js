@@ -689,8 +689,10 @@ async function loadSettings() {
     state.settings = data;
     const autoblock = $('#set-autoblock');
     const dns = $('#set-dns');
+    const dnsBlock = $('#set-dns-block');
     if (autoblock) autoblock.checked = !!data.auto_block_unknown;
     if (dns) dns.checked = !!data.dns_filtering;
+    if (dnsBlock) dnsBlock.checked = !!data.dns_enforces_blocks;
   } catch (err) { /* non-fatal */ }
 }
 
@@ -719,6 +721,24 @@ function bindSettings() {
         await api('/api/settings', { method: 'PATCH', body: { dns_filtering: on } });
         toast(on ? 'DNS filtering enabled' : 'DNS filtering disabled', '', on ? 'ok' : 'warn');
         await loadFilter(true);
+      } catch (err) {
+        this.checked = !on;
+        toast('Could not save setting', err.message, 'error');
+      }
+    });
+  }
+
+  const dnsBlock = $('#set-dns-block');
+  if (dnsBlock) {
+    dnsBlock.addEventListener('change', async function () {
+      const on = this.checked;
+      try {
+        await api('/api/settings', { method: 'PATCH', body: { dns_enforces_blocks: on } });
+        toast(
+          on ? 'Blocked devices now stop resolving' : 'DNS-level blocking off',
+          on ? 'Pause / Block work without routing changes' : 'Blocked devices can resolve names again',
+          on ? 'ok' : 'warn',
+        );
       } catch (err) {
         this.checked = !on;
         toast('Could not save setting', err.message, 'error');

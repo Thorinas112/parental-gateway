@@ -230,6 +230,19 @@ def last_result() -> dict[str, Any]:
     return dict(_last)
 
 
+def device_decision(mac: str | None) -> dict[str, Any] | None:
+    """The live policy decision for a MAC, or None when nothing applies."""
+    if not mac:
+        return None
+    return (_last.get("decisions") or {}).get(mac)
+
+
+def is_blocked(mac: str | None) -> bool:
+    """True when the policy engine currently wants this MAC offline."""
+    decision = device_decision(mac)
+    return bool(decision and decision.get("blocked"))
+
+
 def _countdown(remaining: int) -> str:
     """Human label for how long a timer still has to run."""
     if remaining > 30 * 86400:  # the "until resumed" sentinel
