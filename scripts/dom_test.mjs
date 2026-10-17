@@ -25,7 +25,7 @@ const OVERVIEW = {
       custom_name: "Sam's Tablet", name: "Sam's Tablet",
       group_id: 1, group_name: 'Kids', group_color: '#f87171',
       blocked: false, group_blocked: false, approved: true,
-      effective_blocked: true, reason: 'Schedule “Bedtime” (21:00–07:00)',
+      dns_direct: true, effective_blocked: true, reason: 'Schedule “Bedtime” (21:00–07:00)',
       online: true, first_seen: NOW - 500, last_seen: NOW - 20,
     },
     {
@@ -33,7 +33,7 @@ const OVERVIEW = {
       custom_name: null, name: 'living-room-tv',
       group_id: 2, group_name: 'Smart TVs', group_color: '#22d3ee',
       blocked: false, group_blocked: false, approved: true,
-      effective_blocked: false, reason: null,
+      dns_direct: false, effective_blocked: false, reason: null,
       online: false, first_seen: NOW - 900, last_seen: NOW - 800,
     },
     {
@@ -252,6 +252,8 @@ check('user chip filled', document.getElementById('user-name').textContent === '
 check('custom name displayed', /Sam's Tablet/.test(document.getElementById('device-body').innerHTML));
 check('access switch present', document.querySelectorAll('[data-access-for]').length === 3);
 check('docs link in topbar', document.querySelector('.topbar-actions a[href="/docs"]') !== null);
+check('dns badge for direct device', /DNS/.test(document.getElementById('device-body').innerHTML));
+check('relay badge for indirect device', /via router/.test(document.getElementById('device-body').innerHTML));
 
 console.log('\n-- filtering --');
 const search = document.getElementById('device-search');

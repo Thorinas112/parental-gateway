@@ -304,7 +304,11 @@ function renderDevices() {
     const allowed = !d.effective_blocked;
     return '<tr class="' + (d.effective_blocked ? 'is-blocked' : '') + '">' +
       '<td class="col-status"><span class="dot ' + (d.online ? 'dot-ok' : 'dot-idle') + '" title="' + (d.online ? 'online' : 'last seen ' + fmtDateTime(d.last_seen)) + '"></span></td>' +
-      '<td><div class="cell-name"><strong>' + esc(d.name) + '</strong>' +
+      '<td><div class="cell-name"><strong>' + esc(d.name) +
+        (d.dns_direct
+          ? ' <span class="tag tag-ok" title="Queries this gateway directly - per-device Pause / Block works">DNS ✓</span>'
+          : ' <span class="tag tag-warn" title="DNS arrives relayed through another device - per-device DNS blocking cannot reach it. Set this device&#39;s DNS to the gateway to fix.">via router</span>') +
+        '</strong>' +
         '<span class="muted">' + esc(d.hostname || d.ip || 'unidentified') + '</span></div></td>' +
       '<td class="mono">' + esc(d.ip || '—') + '</td>' +
       '<td class="mono">' + esc(d.mac) + '</td>' +

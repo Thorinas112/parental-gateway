@@ -503,6 +503,22 @@ def dns_query_stats() -> dict[str, Any]:
     }
 
 
+def dns_client_ips(window_seconds: int = 3600) -> set[str]:
+    """Source addresses we have actually received DNS queries from.
+
+    A device appears here only if it queries the gateway *directly*. Anything
+    behind a relaying router never shows up, which is precisely why per-device
+    DNS enforcement cannot reach it.
+    """
+    return {
+        r["ip"]
+        for r in rows(
+            "SELECT DISTINCT ip FROM dns_queries WHERE ts >= ? AND ip IS NOT NULL AND ip != ''",
+            (to_ts() - int(window_seconds),),
+        )
+    }
+
+
 def dns_source_stats(window_seconds: int = 3600) -> dict[str, Any]:
     """Where our DNS queries are actually coming from.
 

@@ -27,6 +27,7 @@ from ..models import (
     delete_group,
     delete_schedule,
     delete_web_rule,
+    dns_client_ips,
     dns_query_stats,
     dns_source_stats,
     get_device,
@@ -88,15 +89,21 @@ def _session_payload(session: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _device_payload(device: dict[str, Any], decisions: dict[str, Any], now_ts: int) -> dict[str, Any]:
+def _device_payload(
+    device: dict[str, Any],
+    decisions: dict[str, Any],
+    now_ts: int,
+    dns_ips: set[str] | None = None,
+) -> dict[str, Any]:
     mac = device["mac"]
     decision = decisions.get(mac) or {}
     last_seen = device.get("last_seen") or 0
     online = (now_ts - int(last_seen)) <= Config.ONLINE_WINDOW_MINUTES * 60
     custom = (device.get("custom_name") or "").strip()
+    ip = device.get("ip") or device.get("last_ip")
     return {
         "mac": mac,
-        "ip": device.get("ip") or device.get("last_ip"),
+        "ip": ip,
         "hostname": device.get("hostname"),
         "custom_name": custom or None,
         "name": custom or device.get("hostname") or mac,
@@ -108,6 +115,9 @@ def _device_payload(device: dict[str, Any], decisions: dict[str, Any], now_ts: i
         "approved": bool(device.get("approved", True)),
         "effective_blocked": bool(decision.get("blocked", False)),
         "reason": decision.get("reason"),
+        # True when this device queries the gateway directly - the only case
+        # where per-device DNS enforcement can actually reach it.
+        "dns_direct": bool(dns_ips is not None and ip in dns_ips),
         "online": online,
         "first_seen": device.get("first_seen"),
         "last_seen": device.get("last_seen"),
@@ -348,9 +358,10 @@ def session_info():
 def overview():
     now = to_ts()
     decisions = engine.last_result().get("decisions") or {}
+    dns_ips = dns_client_ips()
     return jsonify(
         {
-            "devices": [_device_payload(d, decisions, now) for d in list_devices()],
+            "devices": [_device_payload(d, decisions, now, dns_ips) for d in list_devices()],
             "groups": _groups_payload(),
             "schedules": _schedules_payload(),
             "pauses": [_pause_payload(p, now) for p in list_pauses(active_only=True)],
@@ -377,7 +388,8 @@ def overview():
 def devices():
     now = to_ts()
     decisions = engine.last_result().get("decisions") or {}
-    return jsonify({"devices": [_device_payload(d, decisions, now) for d in list_devices()]})
+    dns_ips = dns_client_ips()
+    return jsonify({"devices": [_device_payload(d, decisions, now, dns_ips) for d in list_devices()]})
 
 
 @bp.post("/scan")
@@ -805,8 +817,9 @@ def device_approve_all():
 def devices_unapproved():
     decisions = engine.last_result().get("decisions") or {}
     now = to_ts()
+    dns_ips = dns_client_ips()
     return jsonify(
-        {"devices": [_device_payload(d, decisions, now) for d in list_unapproved()]}
+        {"devices": [_device_payload(d, decisions, now, dns_ips) for d in list_unapproved()]}
     )
 
 
@@ -911,6 +924,7 @@ def dns_status():
             "block_rules": sum(1 for r in rules if r["action"] == "block" and r["enabled"]),
             "allow_rules": sum(1 for r in rules if r["action"] == "allow" and r["enabled"]),
             "sources": dns_source_stats(),
+            "direct_clients": sorted(dns_client_ips()),
             "device_blocking_available": not dns_source_stats().get("suspected_relay", False),
             "dry_run": firewall.dry_run(),
         }

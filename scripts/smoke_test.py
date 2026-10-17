@@ -505,6 +505,30 @@ def main() -> int:
     check("direct clients are not flagged as a relay",
           stats["suspected_relay"] is False and stats["distinct_sources"] == 5, str(stats))
 
+    from app.models import dns_client_ips
+
+    ips = dns_client_ips()
+    check("direct client IPs collected", len(ips) == 5 and "192.168.1.100" in ips, str(sorted(ips)))
+
+    db_execute("DELETE FROM dns_queries")
+    check("no queries -> no visible clients", dns_client_ips() == set())
+
+    payload = client.get("/api/devices").get_json()["devices"]
+    check("device payload reports DNS visibility", "dns_direct" in payload[0],
+          str(sorted(payload[0].keys())))
+
+    db_execute(
+        "INSERT INTO dns_queries (ts, mac, ip, domain, action, reason) VALUES (?,?,?,?,?,?)",
+        (_now(), "AA:BB:CC:DD:EE:01", "192.168.1.10", "example.com", "allowed", "no matching rule"),
+    )
+    by_mac = {d["mac"]: d for d in client.get("/api/devices").get_json()["devices"]}
+    check("device that queries directly is flagged",
+          by_mac["AA:BB:CC:DD:EE:01"]["dns_direct"] is True)
+    check("device behind the relay is not flagged",
+          by_mac["AA:BB:CC:DD:EE:02"]["dns_direct"] is False)
+
+    db_execute("DELETE FROM dns_queries")
+
     db_execute("DELETE FROM dns_queries")
     check("no queries -> not a relay", dns_source_stats()["suspected_relay"] is False)
 
